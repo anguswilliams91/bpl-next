@@ -14,6 +14,8 @@ from numpyro.infer.reparam import LocScaleReparam
 
 from bpl.base import BaseMatchPredictor
 
+MAX_GOALS = 15
+
 
 def _correlation_term(home_goals, away_goals, home_rate, away_rate, corr_coef):
     # correlation term from dixon and coles paper
@@ -113,6 +115,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> DixonColesMatchPredictor:
+
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
 
@@ -164,6 +167,9 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         away_goals: Union[float, Iterable[float]],
     ) -> jnp.array:
 
+        home_team = [home_team] if isinstance(home_team, str) else home_team
+        away_team = [away_team] if isinstance(away_team, str) else away_team
+
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(
             home_team, away_team
         )
@@ -181,3 +187,29 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
 
+    def predict_outcome_proba(
+        self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
+    ) -> Dict[str, jnp.array]:
+
+        home_team = [home_team] if isinstance(home_team, str) else home_team
+        away_team = [away_team] if isinstance(away_team, str) else away_team
+
+        # make a grid of scorelines up to plausible limits
+        n_goals = np.arange(0, MAX_GOALS + 1)
+        x, y = np.meshgrid(n_goals, n_goals, indexing="ij")
+        x_flat = jnp.tile(x.reshape((MAX_GOALS + 1) ** 2), len(home_team))
+        y_flat = jnp.tile(y.reshape((MAX_GOALS + 1) ** 2), len(home_team))
+        home_team_rep = np.repeat(home_team, (MAX_GOALS + 1) ** 2)
+        away_team_rep = np.repeat(away_team, (MAX_GOALS + 1) ** 2)
+
+        # evaluate the probability of scorelines at each gridpoint
+        probs = self.predict_score_proba(
+            home_team_rep, away_team_rep, x_flat, y_flat
+        ).reshape(len(home_team), MAX_GOALS + 1, MAX_GOALS + 1)
+
+        # obtain outcome probabilities by summing the appropriate elements of the grid
+        prob_home_win = probs[:, x > y].sum(axis=-1)
+        prob_away_win = probs[:, x < y].sum(axis=-1)
+        prob_draw = probs[:, x == y].sum(axis=-1)
+
+        return {"home_win": prob_home_win, "away_win": prob_away_win, "draw": prob_draw}
