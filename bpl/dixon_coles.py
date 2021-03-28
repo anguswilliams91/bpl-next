@@ -1,17 +1,16 @@
 """Implementation of a simple team level model."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, Optional, Union
+from typing import Any, Dict, Iterable, Optional, Union
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
-from numpyro.infer.reparam import LocScaleReparam
 from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
-
+from numpyro.infer.reparam import LocScaleReparam
 
 from bpl.base import BaseMatchPredictor
 
@@ -54,7 +53,6 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self.defence = None
         self.home_advantage = None
         self.corr_coef = None
-
 
     def _model(
         self,
@@ -113,7 +111,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
-        nuts_kernel = NUTS(model)
+        nuts_kernel = NUTS(self._model)
         mcmc = MCMC(nuts_kernel, **(mcmc_kwargs or {}))
         rng_key = jax.random.PRNGKey(random_state)
         mcmc.run(
@@ -121,8 +119,8 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
             home_ind,
             away_ind,
             len(self.teams),
-            jnp.array(training_data["home_goals"],
-            jnp.array(training_data["away_goals"],
+            jnp.array(training_data["home_goals"]),
+            jnp.array(training_data["away_goals"]),
             **(run_kwargs or {})
         )
 
