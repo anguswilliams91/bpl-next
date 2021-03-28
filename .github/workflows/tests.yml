@@ -1,5 +1,4 @@
 name: Tests and linting
-
 on: [push, pull_request]
 
 jobs:
@@ -12,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-      - uses: actions/checkout@v1
+        uses: actions/checkout@v1
         with:
           fetch-depth: 1
 
