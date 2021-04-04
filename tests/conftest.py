@@ -1,13 +1,27 @@
+import itertools
+
 import numpy as np
 import pytest
 
 
 @pytest.fixture
 def dummy_data():
-    home_team = np.tile(["A", "B", "C", "D"], 20)
-    away_team = np.tile(["D", "A", "B", "C"], 20)
-    home_goals = np.tile(np.array([3, 0, 1, 2]), 20)
-    away_goals = np.tile(np.array([0, 2, 1, 1]), 20)
+
+    np.random.seed(42)
+    home_mean = 2.1
+    away_mean = 1.7
+
+    home_goals = np.random.poisson(home_mean, size=190)
+    away_goals = np.random.poisson(away_mean, size=190)
+
+    teams = [str(i) for i in range(20)]
+    matchups = itertools.combinations(teams, 2)
+    home_team = []
+    away_team = []
+    for a, b in matchups:
+        home_team.append(a)
+        away_team.append(b)
+
     return {
         "home_team": home_team,
         "away_team": away_team,

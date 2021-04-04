@@ -19,9 +19,9 @@ def test_predict_score_proba(dummy_data, model_cls):
         dummy_data["away_goals"],
     )
 
-    assert jnp.all(0 <= probs <= 1)
+    assert jnp.all((probs >= 0) & (probs <= 1))
 
-    prob_single = model.predict_score_proba("A", "B", 1, 0)[0]
+    prob_single = model.predict_score_proba("0", "1", 1, 0)[0]
     assert 0 <= prob_single <= 1
 
 
@@ -33,7 +33,12 @@ def test_predict_outcome_proba(dummy_data, model_cls):
         dummy_data["home_team"], dummy_data["away_team"]
     )
 
-    assert jnp.all(0 <= probs <= 1)
+    total_probability = probs["home_win"] + probs["away_win"] + probs["draw"]
 
-    prob_single = model.predict_outcome_proba("A", "B")
-    assert 0 <= prob_single <= 1
+    assert jnp.allclose(total_probability, 1.0, atol=1e-5)
+
+    prob_single = model.predict_outcome_proba("0", "1")
+    assert prob_single["home_win"] + prob_single["away_win"] + prob_single[
+        "draw"
+    ] == pytest.approx(1.0, abs=1e-5)
+
