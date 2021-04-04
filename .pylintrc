@@ -1,0 +1,7 @@
+[MESSAGES CONTROL]
+disable=invalid-name
+
+[SIMILARITIES]
+min-similarity-lines=7
+ignore-comments=yes
+ignore-docstrings=yes

@@ -63,8 +63,9 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self.home_advantage = None
         self.corr_coef = None
 
+    # pylint: disable=too-many-locals
+    @staticmethod
     def _model(
-        self,
         home_team: jnp.array,
         away_team: jnp.array,
         num_teams: int,
@@ -106,6 +107,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
+    # pylint: disable=arguments-differ,too-many-arguments
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -186,30 +188,3 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
 
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
-
-    def predict_outcome_proba(
-        self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
-    ) -> Dict[str, jnp.array]:
-
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
-
-        # make a grid of scorelines up to plausible limits
-        n_goals = np.arange(0, MAX_GOALS + 1)
-        x, y = np.meshgrid(n_goals, n_goals, indexing="ij")
-        x_flat = jnp.tile(x.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        y_flat = jnp.tile(y.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        home_team_rep = np.repeat(home_team, (MAX_GOALS + 1) ** 2)
-        away_team_rep = np.repeat(away_team, (MAX_GOALS + 1) ** 2)
-
-        # evaluate the probability of scorelines at each gridpoint
-        probs = self.predict_score_proba(
-            home_team_rep, away_team_rep, x_flat, y_flat
-        ).reshape(len(home_team), MAX_GOALS + 1, MAX_GOALS + 1)
-
-        # obtain outcome probabilities by summing the appropriate elements of the grid
-        prob_home_win = probs[:, x > y].sum(axis=-1)
-        prob_away_win = probs[:, x < y].sum(axis=-1)
-        prob_draw = probs[:, x == y].sum(axis=-1)
-
-        return {"home_win": prob_home_win, "away_win": prob_away_win, "draw": prob_draw}
