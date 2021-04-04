@@ -14,8 +14,6 @@ from numpyro.infer.reparam import LocScaleReparam
 
 from bpl.base import BaseMatchPredictor
 
-MAX_GOALS = 15
-
 
 def _correlation_term(home_goals, away_goals, home_rate, away_rate, corr_coef):
     # correlation term from dixon and coles paper
