@@ -7,7 +7,6 @@ from typing import Dict, Iterable, Union
 import jax.numpy as jnp
 import numpy as np
 
-
 MAX_GOALS = 15
 
 
