@@ -1,5 +1,5 @@
 name: Tests and linting
-on: [push, pull_request]
+on: pull_request
 
 jobs:
   tests:
@@ -28,8 +28,9 @@ jobs:
 
       - name: Code Quality
         run: |
-          poetry run black . --check
-          poetry run isort . -c -v
+          poetry run black bpl --check
+          poetry run isort bpl -c -v
+          poetry run pylint bpl
 
       - name: Test with pytest
         run: poetry run pytest --cov .
