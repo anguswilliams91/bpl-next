@@ -1,4 +1,4 @@
-"""Implementation of a simple team level model."""
+"""Implementation of the model in the current version of bpl."""
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Optional, Union
@@ -15,10 +15,10 @@ from numpyro.infer.reparam import LocScaleReparam
 from bpl.base import BaseMatchPredictor
 from bpl._util import dixon_coles_correlation_term
 
-__all__ = ["DixonColesMatchPredictor"]
+__all__ = ["ExtendedDixonColesMatchPredictor"]
 
 
-class DixonColesMatchPredictor(BaseMatchPredictor):
+class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     """A Dixon-Coles like model for predicting match outcomes."""
 
     def __init__(self):
@@ -26,7 +26,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self.attack = None
         self.defence = None
         self.home_advantage = None
-        self.corr_coef = None
+        self.corr_coef = Nonen
 
     # pylint: disable=too-many-locals
     @staticmethod
@@ -36,27 +36,68 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         num_teams: int,
         home_goals: Iterable[float],
         away_goals: Iterable[float],
+        team_covariates: Optional[np.array],
     ):
-        std_attack = numpyro.sample("std_attack", dist.HalfNormal(1.0))
-        std_defence = numpyro.sample("std_defence", dist.HalfNormal(1.0))
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(0.0, 1.0))
-        home_advantage = numpyro.sample("home_advantage", dist.Normal(0.1, 0.2))
+        std_home_advantage = numpyro.sample(
+            "std_home_advantage", dist.HalfNormal(scale=1.0)
+        )
+        std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
+        std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
 
-        with numpyro.plate("teams", num_teams):
-            with reparam(
-                config={
-                    "attack": LocScaleReparam(centered=0),
-                    "defence": LocScaleReparam(centered=0),
-                }
-            ):
-                attack = numpyro.sample("attack", dist.Normal(0.0, std_attack))
-                defence = numpyro.sample(
-                    "defence", dist.Normal(mean_defence, std_defence)
+        mean_home_advantage = numpyro.sample(
+            "mean_home_advantage", dist.Normal(0.1, 0.2)
+        )
+
+        u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
+        rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
+
+        if team_covariates is not None:
+            standardised_covariates = (
+                team_covariates - team_covariates.mean(axis=-1)
+            ) / team_covariates.std(axis=-1)
+            num_covariates = standardised_covariates.shape[0]
+
+            with numpyro.plate("covariates", num_covariates):
+                attack_coefficients = numpyro.sample(
+                    "attack_coefficients", dist.Normal(loc=0.0, scale=1.0)
+                )
+                defence_coefficients = numpyro.sample(
+                    "defence_coefficients", dist.Normal(loc=0.0, scale=1.0)
                 )
 
+            attack_prior_mean = attack_coefficients @ standardised_covariates
+            defence_prior_mean = (
+                mean_defence + defence_coefficients @ standardised_covariates
+            )
+
+        else:
+            attack_prior_mean = 0.0
+            defence_prior_mean = mean_defence
+
+        with numpyro.plate("teams", num_teams):
+            standardised_attack = numpyro.sample(
+                "attack", dist.Normal(loc=0.0, scale=1.0)
+            )
+            standardised_defence = numpyro.sample(
+                "defence",
+                dist.Normal(
+                    loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho ** 2.0)
+                ),
+            )
+
+            with reparam(config={"home_advantage": LocScaleReparam(centered=0)}):
+                home_advantage = numpyro.sample(
+                    "home_advantage",
+                    dist.Normal(mean_home_advantage, std_home_advantage),
+                )
+
+        attack = attack_prior_mean + standardised_attack * std_attack
+        defence = defence_prior_mean + standardised_defence * std_defence
+
         expected_home_goals = jnp.exp(
-            attack[home_team] - defence[away_team] + home_advantage
+            attack[home_team] - defence[away_team] + home_advantage[home_team]
         )
         expected_away_goals = jnp.exp(attack[away_team] - defence[home_team])
 
@@ -81,10 +122,11 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         num_samples: int = 1000,
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> DixonColesMatchPredictor:
+    ) -> ExtendedDixonColesMatchPredictor:
 
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
+        team_covariates = training_data.get("team_covariates", None)
 
         self.teams = sorted(list(set(home_team) | set(away_team)))
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
@@ -100,6 +142,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
             len(self.teams),
             np.array(training_data["home_goals"]),
             np.array(training_data["away_goals"]),
+            team_covariates=team_covariates,
             **(run_kwargs or {})
         )
 
@@ -121,7 +164,9 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         attack_home, defence_home = self.attack[:, home_ind], self.defence[:, home_ind]
         attack_away, defence_away = self.attack[:, away_ind], self.defence[:, away_ind]
 
-        home_rate = jnp.exp(attack_home - defence_away + self.home_advantage[:, None])
+        home_rate = jnp.exp(
+            attack_home - defence_away + self.home_advantage[:, home_ind]
+        )
         away_rate = jnp.exp(attack_away - defence_home)
 
         return home_rate, away_rate
