@@ -2,9 +2,9 @@
 import jax.numpy as jnp
 import pytest
 
-from bpl import DixonColesMatchPredictor
+from bpl import DixonColesMatchPredictor, ExtendedDixonColesMatchPredictor
 
-MODELS = [DixonColesMatchPredictor]
+MODELS = [DixonColesMatchPredictor, ExtendedDixonColesMatchPredictor]
 
 
 @pytest.mark.parametrize("model_cls", MODELS)
