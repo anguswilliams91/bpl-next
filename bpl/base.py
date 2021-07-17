@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Dict, Iterable, Union
+from typing import Dict, Iterable, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -79,3 +79,61 @@ class BaseMatchPredictor:
         prob_draw = probs[:, x == y].sum(axis=-1)
 
         return {"home_win": prob_home_win, "away_win": prob_away_win, "draw": prob_draw}
+
+    def predict_score_n_proba(
+        self,
+        n: int,
+        team: Union[str, Iterable[str]],
+        opponent: Union[str, Iterable[str]],
+        home: Optional[bool] = True,
+    ) -> float:
+        """
+        Compute the probability that a team will score n goals.
+        Given a team and an opponent, calculate the probability that the team will
+        score n goals against this opponent.
+
+        Args:
+            n (int): number of goals scored.
+            team (Union[str, Iterable[str]]): name of the team scoring the goals.
+            opponent (Union[str, Iterable[str]]): name of the opponent.
+            home (Optional[bool]): whether team is at home.
+
+        Returns:
+            float: Probability that team scores n goals against opponent.
+        """
+        score_fn = (
+            (lambda x: self.predict_score_proba(team, opponent, n, x))
+            if home
+            else (lambda x: self.predict_score_proba(opponent, team, x, n))
+        )
+        # sum probability all scorelines where team scored n goals
+        return sum(score_fn(np.arange(MAX_GOALS + 1)))
+
+    def predict_concede_n_proba(
+        self,
+        n: int,
+        team: Union[str, Iterable[str]],
+        opponent: Union[str, Iterable[str]],
+        home: Optional[bool] = True,
+    ) -> float:
+        """
+        Compute the probability that a team will concede n goals.
+        Given a team and an opponent, calculate the probability that the team will
+        concede n goals against this opponent.
+
+        Args:
+            n (int): number of goals conceded.
+            team (Union[str, Iterable[str]]): name of the team conceding the goals.
+            opponent (Union[str, Iterable[str]]): name of the opponent.
+            home (Optional[bool]): whether team is at home.
+
+        Returns:
+            float: Probability that team concedes n goals against opponent.
+        """
+        score_fn = (
+            (lambda x: self.predict_score_proba(team, opponent, x, n))
+            if home
+            else (lambda x: self.predict_score_proba(opponent, team, n, x))
+        )
+        # sum probability all scorelines where team conceded n goals
+        return sum(score_fn(np.arange(MAX_GOALS + 1)))
