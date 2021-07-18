@@ -82,58 +82,77 @@ class BaseMatchPredictor:
 
     def predict_score_n_proba(
         self,
-        n: int,
+        n: Union[int, Iterable[int]],
         team: Union[str, Iterable[str]],
         opponent: Union[str, Iterable[str]],
         home: Optional[bool] = True,
-    ) -> float:
+    ) -> jnp.array:
         """
         Compute the probability that a team will score n goals.
         Given a team and an opponent, calculate the probability that the team will
         score n goals against this opponent.
 
         Args:
-            n (int): number of goals scored.
+            n (Union[int, Iterable[int]]): number of goals scored.
             team (Union[str, Iterable[str]]): name of the team scoring the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
 
         Returns:
-            float: Probability that team scores n goals against opponent.
+            jnp.array: Probability that team scores n goals against opponent.
         """
-        score_fn = (
-            (lambda x: self.predict_score_proba(team, opponent, n, x))
+        n = [n] if isinstance(n, int) else n
+
+        # flat lists of all possible scorelines with team scoring n goals
+        team_rep = np.repeat(team, (MAX_GOALS + 1) * len(n))
+        opponent_rep = np.repeat(opponent, (MAX_GOALS + 1) * len(n))
+        n_rep = np.resize(n, (MAX_GOALS + 1) * len(n))
+        x_rep = np.repeat(np.arange(MAX_GOALS + 1), len(n))
+
+        probs = (
+            self.predict_score_proba(team_rep, opponent_rep, n_rep, x_rep)
             if home
-            else (lambda x: self.predict_score_proba(opponent, team, x, n))
-        )
-        # sum probability all scorelines where team scored n goals
-        return sum(score_fn(np.arange(MAX_GOALS + 1)))
+            else self.predict_score_proba(opponent_rep, team_rep, x_rep, n_rep)
+        ).reshape(MAX_GOALS + 1, len(n))
+
+        # sum probability of all scorelines where team scored n goals
+        return probs.sum(axis=0)
 
     def predict_concede_n_proba(
         self,
-        n: int,
+        n: Union[int, Iterable[int]],
         team: Union[str, Iterable[str]],
         opponent: Union[str, Iterable[str]],
         home: Optional[bool] = True,
-    ) -> float:
+    ) -> jnp.array:
         """
         Compute the probability that a team will concede n goals.
         Given a team and an opponent, calculate the probability that the team will
         concede n goals against this opponent.
 
         Args:
-            n (int): number of goals conceded.
+            n (Union[int, Iterable[int]]): number of goals conceded.
             team (Union[str, Iterable[str]]): name of the team conceding the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
 
         Returns:
-            float: Probability that team concedes n goals against opponent.
+            jnp.array: Probability that team concedes n goals against opponent.
         """
-        score_fn = (
-            (lambda x: self.predict_score_proba(team, opponent, x, n))
+        n = [n] if isinstance(n, int) else n
+
+        # flat lists of all possible scorelines with team conceding n goals
+        team_rep = np.repeat(team, (MAX_GOALS + 1) * len(n))
+        opponent_rep = np.repeat(opponent, (MAX_GOALS + 1) * len(n))
+        n_rep = np.resize(n, (MAX_GOALS + 1) * len(n))
+        x_rep = np.repeat(np.arange(MAX_GOALS + 1), len(n))
+
+        probs = (
+            self.predict_score_proba(team_rep, opponent_rep, x_rep, n_rep)
             if home
-            else (lambda x: self.predict_score_proba(opponent, team, n, x))
-        )
+            else self.predict_score_proba(opponent_rep, team_rep, n_rep, x_rep)
+        ).reshape(MAX_GOALS + 1, len(n))
+
         # sum probability all scorelines where team conceded n goals
-        return sum(score_fn(np.arange(MAX_GOALS + 1)))
+        return probs.sum(axis=0)
+
