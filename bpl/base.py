@@ -155,4 +155,3 @@ class BaseMatchPredictor:
 
         # sum probability all scorelines where team conceded n goals
         return probs.sum(axis=0)
-
