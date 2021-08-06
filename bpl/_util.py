@@ -10,7 +10,7 @@ def dixon_coles_correlation_term(
     home_rate: jnp.array,
     away_rate: jnp.array,
     corr_coef: jnp.array,
-    tol: float = 1e-9,  # FIXME workaround to clip negative values to tol to avoid NaNs
+    tol: float = 0,  # FIXME workaround to clip negative values to tol to avoid NaNs
 ) -> jnp.array:
     # correlation term from dixon and coles paper
     corr_term = jnp.zeros_like(home_rate)
@@ -44,7 +44,7 @@ def dixon_coles_correlation_term(
         corr_term,
         (..., nil_one),
         jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], a_min=TOL)
+            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], a_min=tol)
         ),
     )
 
@@ -52,7 +52,7 @@ def dixon_coles_correlation_term(
     corr_term = jax.ops.index_update(
         corr_term,
         (..., one_one),
-        jnp.log(jnp.clip(1.0 - corr_coef[..., None], a_min=TOL)),
+        jnp.log(jnp.clip(1.0 - corr_coef[..., None], a_min=tol)),
     )
 
     return corr_term
