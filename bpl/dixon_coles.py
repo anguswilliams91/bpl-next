@@ -12,8 +12,8 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl.base import BaseMatchPredictor
 from bpl._util import dixon_coles_correlation_term
+from bpl.base import BaseMatchPredictor
 
 __all__ = ["DixonColesMatchPredictor"]
 
