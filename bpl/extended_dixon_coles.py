@@ -177,7 +177,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         )
 
         samples = mcmc.get_samples()
-        print(samples.keys())
         self.attack = samples["attack"]
         self.defence = samples["defence"]
         self.home_advantage = samples["home_advantage"]
