@@ -1,7 +1,8 @@
 """Implementation of the model in the current version of bpl."""
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Optional, Union
+import warnings
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -30,6 +31,13 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self.rho = None
         self.attack_coefficients = None
         self.defence_coefficients = None
+        self.mean_defence = None
+        self.std_defence = None
+        self.std_attack = None
+        self.mean_home_advantage = None
+        self.std_home_advantage = None
+        self._team_covariates_mean = None
+        self._team_covariates_std = None
 
     # pylint: disable=too-many-locals
     @staticmethod
@@ -147,6 +155,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         if team_covariates:
             if set(team_covariates.keys()) == set(self.teams):
                 team_covariates = jnp.array([team_covariates[t] for t in self.teams])
+                self._team_covariates_mean = team_covariates.mean(axis=0)
+                self._team_covariates_std = team_covariates.std(axis=0)
             else:
                 raise ValueError(
                     "team_covariates must contain all the teams in the data."
@@ -167,6 +177,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         )
 
         samples = mcmc.get_samples()
+        print(samples.keys())
         self.attack = samples["attack"]
         self.defence = samples["defence"]
         self.home_advantage = samples["home_advantage"]
@@ -174,12 +185,17 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self.rho = samples["rho"]
         self.attack_coefficients = samples.get("attack_coefficients", None)
         self.defence_coefficients = samples.get("defence_coefficients", None)
+        self.mean_defence = samples["mean_defence"]
+        self.std_defence = samples["std_defence"]
+        self.std_attack = samples["std_attack"]
+        self.mean_home_advantage = samples["mean_home_advantage"]
+        self.std_home_advantage = samples["std_home_advantage"]
 
         return self
 
     def _calculate_expected_goals(
         self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
-    ) -> (jnp.array, jnp.array):
+    ) -> Tuple[jnp.array, jnp.array]:
 
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
@@ -221,3 +237,47 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
+
+    def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
+        if team_name in self.teams:
+            raise ValueError("Team {} already known to model.".format(team_name))
+
+        if self.attack_coefficients is not None:
+            if team_covariates is None:
+                warnings.warn(
+                    "You haven't provided features for {}."
+                    " Assuming team_covariates are the average of known teams."
+                    " For better forecasts, provide team_covariates.".format(team_name)
+                )
+                team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
+            else:
+                team_covariates = (
+                    0.5
+                    * (team_covariates - self._team_covariates_mean)
+                    / self._team_covariates_std
+                )
+            mean_attack = jnp.dot(self.attack_coefficients, team_covariates.ravel())
+            mean_defence = self.mean_defence + jnp.dot(
+                self.defence_coefficients, team_covariates.ravel()
+            )
+        else:
+            mean_attack = 0.0
+            mean_defence = self.mean_defence
+
+        log_a_tilde = np.random.normal(loc=0.0, scale=1.0, size=len(self.std_attack))
+        log_b_tilde = np.random.normal(
+            loc=self.rho * log_a_tilde, scale=np.sqrt(1 - self.rho ** 2.0)
+        )
+        home_advantage = np.random.normal(
+            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        )
+
+        attack = mean_attack + log_a_tilde * self.std_attack
+        defence = mean_defence + log_b_tilde * self.std_defence
+
+        self.teams.append(team_name)
+        self.attack = jnp.concatenate((self.attack, attack[:, None]), axis=1)
+        self.defence = jnp.concatenate((self.defence, defence[:, None]), axis=1)
+        self.home_advantage = jnp.concatenate(
+            (self.home_advantage, home_advantage[:, None]), axis=1
+        )
