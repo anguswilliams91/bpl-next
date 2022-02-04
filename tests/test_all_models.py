@@ -58,7 +58,7 @@ def test_predict_score_n_proba(dummy_data, model_cls):
     assert len(proba_home) == len(n)
     assert jnp.all((proba_away >= 0) & (proba_away <= 1))
     assert sum(proba_away) == pytest.approx(1.0, abs=1e-5)
-    
+
     assert sum(proba_home * n) > sum(proba_away * n)  # score more at home
 
     proba_single = model.predict_score_n_proba(1, "0", "1")

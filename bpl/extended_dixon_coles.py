@@ -87,7 +87,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             standardised_defence = numpyro.sample(
                 "standardised_defence",
                 dist.Normal(
-                    loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho ** 2.0)
+                    loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho**2.0)
                 ),
             )
 
@@ -163,7 +163,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             np.array(training_data["home_goals"]),
             np.array(training_data["away_goals"]),
             team_covariates=team_covariates,
-            **(run_kwargs or {})
+            **(run_kwargs or {}),
         )
 
         samples = mcmc.get_samples()
