@@ -100,7 +100,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
             len(self.teams),
             np.array(training_data["home_goals"]),
             np.array(training_data["away_goals"]),
-            **(run_kwargs or {})
+            **(run_kwargs or {}),
         )
 
         samples = mcmc.get_samples()
