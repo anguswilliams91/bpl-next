@@ -16,9 +16,7 @@ def dixon_coles_correlation_term(
     corr_term = jnp.zeros_like(home_rate)
 
     nil_nil = (home_goals == 0) & (away_goals == 0)
-    corr_term = jax.ops.index_update(
-        corr_term,
-        (..., nil_nil),
+    corr_term = corr_term.at[..., nil_nil].set(
         jnp.log(
             jnp.clip(
                 1.0
@@ -27,31 +25,27 @@ def dixon_coles_correlation_term(
                 * away_rate[..., nil_nil],
                 a_min=tol,
             )
-        ),
+        )
     )
 
     one_nil = (home_goals == 1) & (away_goals == 0)
-    corr_term = jax.ops.index_update(
-        corr_term,
-        (..., one_nil),
+    corr_term = corr_term.at[..., one_nil].set(
         jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * away_rate[..., one_nil], a_min=tol)
+            jnp.clip(1.0 + corr_coef[..., None] * away_rate[..., one_nil],
+                     a_min=tol)
         ),
     )
 
     nil_one = (home_goals == 0) & (away_goals == 1)
-    corr_term = jax.ops.index_update(
-        corr_term,
-        (..., nil_one),
+    corr_term = corr_term.at[..., nil_one].set(
         jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], a_min=tol)
+            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one],
+                     a_min=tol)
         ),
     )
 
     one_one = (home_goals == 1) & (away_goals == 1)
-    corr_term = jax.ops.index_update(
-        corr_term,
-        (..., one_one),
+    corr_term = corr_term.at[..., one_one].set(
         jnp.log(jnp.clip(1.0 - corr_coef[..., None], a_min=tol)),
     )
 
