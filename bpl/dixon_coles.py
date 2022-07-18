@@ -91,7 +91,12 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
         nuts_kernel = NUTS(self._model)
-        mcmc = MCMC(nuts_kernel, num_warmup, num_samples, **(mcmc_kwargs or {}))
+        mcmc = MCMC(
+            nuts_kernel,
+            num_warmup=num_warmup,
+            num_samples=num_samples,
+            **(mcmc_kwargs or {}),
+        )
         rng_key = jax.random.PRNGKey(random_state)
         mcmc.run(
             rng_key,
