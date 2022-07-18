@@ -163,7 +163,12 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                 )
 
         nuts_kernel = NUTS(self._model)
-        mcmc = MCMC(nuts_kernel, num_warmup=num_warmup, num_samples=num_samples, **(mcmc_kwargs or {}))
+        mcmc = MCMC(
+            nuts_kernel,
+            num_warmup=num_warmup,
+            num_samples=num_samples,
+            **(mcmc_kwargs or {}),
+        )
         rng_key = jax.random.PRNGKey(random_state)
         mcmc.run(
             rng_key,
@@ -265,7 +270,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         log_a_tilde = np.random.normal(loc=0.0, scale=1.0, size=len(self.std_attack))
         log_b_tilde = np.random.normal(
-            loc=self.rho * log_a_tilde, scale=np.sqrt(1 - self.rho ** 2.0)
+            loc=self.rho * log_a_tilde, scale=np.sqrt(1 - self.rho**2.0)
         )
         home_advantage = np.random.normal(
             loc=self.mean_home_advantage, scale=self.std_home_advantage
