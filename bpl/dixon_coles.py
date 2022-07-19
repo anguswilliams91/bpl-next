@@ -34,8 +34,8 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         home_team: jnp.array,
         away_team: jnp.array,
         num_teams: int,
-        home_goals: Iterable[float],
-        away_goals: Iterable[float],
+        home_goals: Iterable[int],
+        away_goals: Iterable[int],
     ):
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(1.0))
@@ -135,8 +135,8 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self,
         home_team: Union[str, Iterable[str]],
         away_team: Union[str, Iterable[str]],
-        home_goals: Union[float, Iterable[float]],
-        away_goals: Union[float, Iterable[float]],
+        home_goals: Union[int, Iterable[int]],
+        away_goals: Union[int, Iterable[int]],
     ) -> jnp.array:
 
         home_team = [home_team] if isinstance(home_team, str) else home_team

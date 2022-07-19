@@ -24,17 +24,17 @@ class BaseMatchPredictor:
         self,
         home_team: Union[str, Iterable[str]],
         away_team: Union[str, Iterable[str]],
-        home_goals: Union[float, Iterable[float]],
-        away_goals: Union[float, Iterable[float]],
+        home_goals: Union[int, Iterable[int]],
+        away_goals: Union[int, Iterable[int]],
     ) -> jnp.array:
         """Return the probability of a particular scoreline.
 
         Args:
             home_team (Union[str, Iterable[str]]): name of the home team(s).
             away_team (Union[str, Iterable[str]]): name of the away team(s).
-            home_goals (Union[float, Iterable[float]]): number of goals scored by
+            home_goals (Union[int, Iterable[int]]): number of goals scored by
                 the home team(s).
-            away_goals (Union[float, Iterable[float]]): number of goals scored by
+            away_goals (Union[int, Iterable[int]]): number of goals scored by
                 the away team(s).
 
         Returns:
