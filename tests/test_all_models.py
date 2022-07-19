@@ -88,4 +88,6 @@ def test_predict_concede_n_proba(dummy_data, model_cls):
     assert (proba_team_concede[0] >= 0) and (proba_team_concede[0] <= 1)
 
     proba_opponent_score = model.predict_score_n_proba(1, "1", "0", home=False)
-    assert proba_team_concede == pytest.approx(proba_opponent_score, abs=1e-5)
+    assert proba_team_concede.tolist() == pytest.approx(
+        proba_opponent_score.tolist(), abs=1e-5
+    )
