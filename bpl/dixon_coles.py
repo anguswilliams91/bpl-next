@@ -12,45 +12,10 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
+from bpl._util import dixon_coles_correlation_term
 from bpl.base import BaseMatchPredictor
 
 __all__ = ["DixonColesMatchPredictor"]
-
-
-def _correlation_term(home_goals, away_goals, home_rate, away_rate, corr_coef):
-    # correlation term from dixon and coles paper
-    corr_term = jnp.zeros_like(home_rate)
-
-    nil_nil = (home_goals == 0) & (away_goals == 0)
-    corr_term = jax.ops.index_update(
-        corr_term,
-        (..., nil_nil),
-        jnp.log(
-            1.0
-            - corr_coef[..., None] * home_rate[..., nil_nil] * away_rate[..., nil_nil]
-        ),
-    )
-
-    one_nil = (home_goals == 1) & (away_goals == 0)
-    corr_term = jax.ops.index_update(
-        corr_term,
-        (..., one_nil),
-        jnp.log(1.0 + corr_coef[..., None] * away_rate[..., one_nil]),
-    )
-
-    nil_one = (home_goals == 0) & (away_goals == 1)
-    corr_term = jax.ops.index_update(
-        corr_term,
-        (..., nil_one),
-        jnp.log(1.0 + corr_coef[..., None] * home_rate[..., nil_one]),
-    )
-
-    one_one = (home_goals == 1) & (away_goals == 1)
-    corr_term = jax.ops.index_update(
-        corr_term, (..., one_one), jnp.log(1.0 - corr_coef[..., None])
-    )
-
-    return corr_term
 
 
 class DixonColesMatchPredictor(BaseMatchPredictor):
@@ -69,8 +34,8 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         home_team: jnp.array,
         away_team: jnp.array,
         num_teams: int,
-        home_goals: Optional[Iterable[float]],
-        away_goals: Optional[Iterable[float]],
+        home_goals: Iterable[int],
+        away_goals: Iterable[int],
     ):
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(1.0))
@@ -102,7 +67,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
 
-        corr_term = _correlation_term(
+        corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
@@ -126,7 +91,12 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
         nuts_kernel = NUTS(self._model)
-        mcmc = MCMC(nuts_kernel, num_warmup, num_samples, **(mcmc_kwargs or {}))
+        mcmc = MCMC(
+            nuts_kernel,
+            num_warmup=num_warmup,
+            num_samples=num_samples,
+            **(mcmc_kwargs or {}),
+        )
         rng_key = jax.random.PRNGKey(random_state)
         mcmc.run(
             rng_key,
@@ -135,7 +105,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
             len(self.teams),
             np.array(training_data["home_goals"]),
             np.array(training_data["away_goals"]),
-            **(run_kwargs or {})
+            **(run_kwargs or {}),
         )
 
         samples = mcmc.get_samples()
@@ -165,8 +135,8 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self,
         home_team: Union[str, Iterable[str]],
         away_team: Union[str, Iterable[str]],
-        home_goals: Union[float, Iterable[float]],
-        away_goals: Union[float, Iterable[float]],
+        home_goals: Union[int, Iterable[int]],
+        away_goals: Union[int, Iterable[int]],
     ) -> jnp.array:
 
         home_team = [home_team] if isinstance(home_team, str) else home_team
@@ -175,7 +145,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(
             home_team, away_team
         )
-        corr_term = _correlation_term(
+        corr_term = dixon_coles_correlation_term(
             home_goals,
             away_goals,
             expected_home_goals,
