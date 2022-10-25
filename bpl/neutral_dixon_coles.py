@@ -1,4 +1,3 @@
-"""Implementation of the model in the current version of bpl."""
 from __future__ import annotations
 
 import warnings
