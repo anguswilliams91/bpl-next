@@ -20,7 +20,11 @@ __all__ = ["NeutralDixonColesMatchPredictor"]
 
 
 class NeutralDixonColesMatchPredictor:
-    """A Dixon-Coles like model for predicting match outcomes."""
+    """
+    A Dixon-Coles like model for predicting match outcomes, modified to:
+    - Work for matches in neutral venues (e.g. international tournaments)
+    - Add separate home & away, defence & attack, advantages/disadvantages for each team
+    """
 
     def __init__(self):
         self.teams = None
@@ -293,14 +297,14 @@ class NeutralDixonColesMatchPredictor:
 
     def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
         if team_name in self.teams:
-            raise ValueError("Team {} already known to model.".format(team_name))
+            raise ValueError(f"Team {team_name} already known to model.")
 
         if self.attack_coefficients is not None:
             if team_covariates is None:
                 warnings.warn(
-                    "You haven't provided features for {}."
+                    f"You haven't provided features for {team_name}."
                     " Assuming team_covariates are the average of known teams."
-                    " For better forecasts, provide team_covariates.".format(team_name)
+                    " For better forecasts, provide team_covariates."
                 )
                 team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
             else:
@@ -366,6 +370,8 @@ class NeutralDixonColesMatchPredictor:
         Args:
             home_team (Union[str, Iterable[str]]): name of the home team(s).
             away_team (Union[str, Iterable[str]]): name of the away team(s).
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+            else 0
 
         Returns:
             Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
@@ -413,6 +419,8 @@ class NeutralDixonColesMatchPredictor:
             team (Union[str, Iterable[str]]): name of the team scoring the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+            else 0
 
         Returns:
             jnp.array: Probability that team scores n goals against opponent.
@@ -457,6 +465,8 @@ class NeutralDixonColesMatchPredictor:
             team (Union[str, Iterable[str]]): name of the team conceding the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+            else 0
 
         Returns:
             jnp.array: Probability that team concedes n goals against opponent.

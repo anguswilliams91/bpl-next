@@ -94,3 +94,29 @@ def test_predict_concede_n_proba(model):
     assert proba_team_concede.tolist() == pytest.approx(
         proba_opponent_score.tolist(), abs=1e-5
     )
+
+
+def test_predict_outcome_neutral_proba(model, neutral_dummy_data):
+    probs = model.predict_outcome_proba(
+        neutral_dummy_data["home_team"],
+        neutral_dummy_data["away_team"],
+        neutral_dummy_data["neutral_venue"],
+    )
+
+    neutral_home_win = float(
+        probs["home_win"][neutral_dummy_data["neutral_venue"] == 1].mean()
+    )
+    neutral_away_win = float(
+        probs["away_win"][neutral_dummy_data["neutral_venue"] == 1].mean()
+    )
+    normal_home_win = float(
+        probs["home_win"][neutral_dummy_data["neutral_venue"] == 0].mean()
+    )
+    normal_away_win = float(
+        probs["away_win"][neutral_dummy_data["neutral_venue"] == 0].mean()
+    )
+
+    assert neutral_home_win == pytest.approx(neutral_away_win, abs=1e-2)
+    assert normal_home_win > normal_away_win
+    assert normal_home_win > neutral_home_win
+    assert neutral_away_win > normal_away_win
