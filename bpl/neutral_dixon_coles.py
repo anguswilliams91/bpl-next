@@ -188,14 +188,13 @@ class NeutralDixonColesMatchPredictor:
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
         if team_covariates:
-            if set(team_covariates.keys()) == set(self.teams):
-                team_covariates = jnp.array([team_covariates[t] for t in self.teams])
-                self._team_covariates_mean = team_covariates.mean(axis=0)
-                self._team_covariates_std = team_covariates.std(axis=0)
-            else:
+            if set(team_covariates.keys()) != set(self.teams):
                 raise ValueError(
                     "team_covariates must contain all the teams in the data."
                 )
+            team_covariates = jnp.array([team_covariates[t] for t in self.teams])
+            self._team_covariates_mean = team_covariates.mean(axis=0)
+            self._team_covariates_std = team_covariates.std(axis=0)
 
         nuts_kernel = NUTS(self._model)
         mcmc = MCMC(

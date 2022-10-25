@@ -31,7 +31,7 @@ jobs:
         run: |
           poetry run black bpl --check
           poetry run isort bpl -c -v
-          poetry run pylint --fail-under 9.5 bpl
+          poetry run pylint --fail-under 9 bpl
 
       - name: Test with pytest
         run: poetry run pytest --cov .
