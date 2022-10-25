@@ -14,26 +14,20 @@ from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
 from bpl._util import dixon_coles_correlation_term
-from bpl.base import BaseMatchPredictor
+from bpl.base import MAX_GOALS
 
 __all__ = ["NeutralDixonColesMatchPredictor"]
 
 
-class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
-    """
-    Modified version of ExtendedDixonColesMatchPredictor that allows for:
-      - Matches in neutral venues (e.g. international tournaments)
-      - Home/away advantage/disadvantage parameters for attack and defence
-    """
+class NeutralDixonColesMatchPredictor:
+    """A Dixon-Coles like model for predicting match outcomes."""
 
     def __init__(self):
         self.teams = None
         self.attack = None
         self.defence = None
         self.home_attack_advantage = None
-        self.home_defence_advantage = None
         self.away_attack_disadvantage = None
-        self.away_defence_disadvantage = None
         self.corr_coef = None
         self.rho = None
         self.attack_coefficients = None
@@ -113,24 +107,10 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
                     dist.Normal(mean_home_advantage, std_home_advantage),
                 )
             with reparam(
-                config={"home_defence_advantage": LocScaleReparam(centered=0)}
-            ):
-                home_defence_advantage = numpyro.sample(
-                    "home_defence_advantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
-                )
-            with reparam(
                 config={"away_attack_disadvantage": LocScaleReparam(centered=0)}
             ):
                 away_attack_disadvantage = numpyro.sample(
                     "away_attack_disadvantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
-                )
-            with reparam(
-                config={"away_defence_disadvantage": LocScaleReparam(centered=0)}
-            ):
-                away_defence_disadvantage = numpyro.sample(
-                    "away_defence_disadvantage",
                     dist.Normal(mean_home_advantage, std_home_advantage),
                 )
 
@@ -145,12 +125,10 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
             attack[home_team]
             - defence[away_team]
             + (1 - neutral_venue) * home_attack_advantage[home_team]
-            + (1 - neutral_venue) * away_defence_disadvantage[away_team]
         )
         expected_away_goals = jnp.exp(
             attack[away_team]
             - defence[home_team]
-            - (1 - neutral_venue) * home_defence_advantage[home_team]
             - (1 - neutral_venue) * away_attack_disadvantage[away_team]
         )
 
@@ -179,7 +157,7 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         num_samples: int = 1000,
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> NeutralDixonColesMatchPredictor:
+    ) -> ExtendedDixonColesMatchPredictor:
 
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
@@ -190,14 +168,14 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
         if team_covariates:
-            if set(team_covariates.keys()) != set(self.teams):
+            if set(team_covariates.keys()) == set(self.teams):
+                team_covariates = jnp.array([team_covariates[t] for t in self.teams])
+                self._team_covariates_mean = team_covariates.mean(axis=0)
+                self._team_covariates_std = team_covariates.std(axis=0)
+            else:
                 raise ValueError(
                     "team_covariates must contain all the teams in the data."
                 )
-
-            team_covariates = jnp.array([team_covariates[t] for t in self.teams])
-            self._team_covariates_mean = team_covariates.mean(axis=0)
-            self._team_covariates_std = team_covariates.std(axis=0)
 
         nuts_kernel = NUTS(self._model)
         mcmc = MCMC(
@@ -223,13 +201,11 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         self.attack = samples["attack"]
         self.defence = samples["defence"]
         self.home_attack_advantage = samples["home_attack_advantage"]
-        self.home_defence_advantage = samples["home_defence_advantage"]
         self.away_attack_disadvantage = samples["away_attack_disadvantage"]
-        self.away_defence_disadvantage = samples["away_defence_disadvantage"]
         self.corr_coef = samples["corr_coef"]
         self.rho = samples["rho"]
-        self.attack_coefficients = samples.get("attack_coefficients")
-        self.defence_coefficients = samples.get("defence_coefficients")
+        self.attack_coefficients = samples.get("attack_coefficients", None)
+        self.defence_coefficients = samples.get("defence_coefficients", None)
         self.mean_defence = samples["mean_defence"]
         self.std_defence = samples["std_defence"]
         self.std_attack = samples["std_attack"]
@@ -253,20 +229,13 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         attack_away, defence_away = self.attack[:, away_ind], self.defence[:, away_ind]
 
         home_rate = jnp.exp(
-            attack_home - defence_away + self.home_advantage[:, home_ind]
-        )
-        away_rate = jnp.exp(attack_away - defence_home)
-
-        home_rate = jnp.exp(
             attack_home
             - defence_away
             + (1 - neutral_venue) * self.home_attack_advantage[:, home_ind]
-            + (1 - neutral_venue) * self.away_defence_disadvantage[:, away_ind]
         )
         away_rate = jnp.exp(
             attack_away
             - defence_home
-            - (1 - neutral_venue) * self.home_defence_advantage[:, home_ind]
             - (1 - neutral_venue) * self.away_attack_disadvantage[:, away_ind]
         )
 
@@ -303,14 +272,14 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
 
     def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
         if team_name in self.teams:
-            raise ValueError(f"Team {team_name} already known to model.")
+            raise ValueError("Team {} already known to model.".format(team_name))
 
         if self.attack_coefficients is not None:
             if team_covariates is None:
                 warnings.warn(
-                    f"You haven't provided features for {team_name}"
+                    "You haven't provided features for {}."
                     " Assuming team_covariates are the average of known teams."
-                    " For better forecasts, provide team_covariates."
+                    " For better forecasts, provide team_covariates.".format(team_name)
                 )
                 team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
             else:
@@ -334,16 +303,9 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         home_attack_advantage = np.random.normal(
             loc=self.mean_home_advantage, scale=self.std_home_advantage
         )
-        home_defence_advantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
-        )
         away_attack_disadvantage = np.random.normal(
             loc=self.mean_home_advantage, scale=self.std_home_advantage
         )
-        away_defence_disadvantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
-        )
-
         attack = mean_attack + log_a_tilde * self.std_attack
         defence = mean_defence + log_b_tilde * self.std_defence
 
@@ -353,17 +315,8 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         self.home_attack_advantage = jnp.concatenate(
             (self.home_attack_advantage, home_attack_advantage[:, None]), axis=1
         )
-        self.home_attack_advantage = jnp.concatenate(
-            (self.home_attack_advantage, home_attack_advantage[:, None]), axis=1
-        )
-        self.home_defence_advantage = jnp.concatenate(
-            (self.home_defence_advantage, home_defence_advantage[:, None]), axis=1
-        )
         self.away_attack_disadvantage = jnp.concatenate(
             (self.away_attack_disadvantage, away_attack_disadvantage[:, None]), axis=1
-        )
-        self.away_defence_disadvantage = jnp.concatenate(
-            (self.away_defence_disadvantage, away_defence_disadvantage[:, None]), axis=1
         )
 
     def predict_outcome_proba(
@@ -380,8 +333,6 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         Args:
             home_team (Union[str, Iterable[str]]): name of the home team(s).
             away_team (Union[str, Iterable[str]]): name of the away team(s).
-            neutral_venue (Union[int, Iterable[int]]): whether match(es) at a neutral
-            venue
 
         Returns:
             Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
@@ -429,7 +380,6 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
             team (Union[str, Iterable[str]]): name of the team scoring the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
-            neutral_venue (Optional[int]): whether match(es) at a neutral venue
 
         Returns:
             jnp.array: Probability that team scores n goals against opponent.
@@ -461,7 +411,7 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
         n: Union[int, Iterable[int]],
         team: Union[str, Iterable[str]],
         opponent: Union[str, Iterable[str]],
-        home: Optional[int] = 1,
+        home: Optional[bool] = True,
         neutral_venue: Optional[int] = 0,
     ) -> jnp.array:
         """
@@ -474,7 +424,6 @@ class NeutralDixonColesMatchPredictor(BaseMatchPredictor):
             team (Union[str, Iterable[str]]): name of the team conceding the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
-            neutral_venue (Optional[int]): whether match(es) at a neutral venue
 
         Returns:
             jnp.array: Probability that team concedes n goals against opponent.
