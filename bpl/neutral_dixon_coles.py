@@ -56,17 +56,34 @@ class NeutralDixonColesMatchPredictor:
         neutral_venue: Iterable[int],
         team_covariates: Optional[np.array],
     ):
-        std_home_advantage = numpyro.sample(
-            "std_home_advantage", dist.HalfNormal(scale=1.0)
+        mean_home_attack = numpyro.sample(
+            "mean_home_attack", dist.Normal(0.1, 0.2)
         )
+        mean_away_attack = numpyro.sample(
+            "mean_away_attack", dist.Normal(-0.1, 0.2)
+        )
+        mean_home_defence = numpyro.sample(
+            "mean_home_defence", dist.Normal(0.1, 0.2)
+        )
+        mean_away_defence = numpyro.sample(
+            "mean_away_defence", dist.Normal(-0.1, 0.2)
+        )
+        std_home_attack = numpyro.sample(
+            "std_home_attack", dist.HalfNormal(scale=1.0)
+        )
+        std_away_attack = numpyro.sample(
+            "std_away_attack", dist.HalfNormal(scale=1.0)
+        )
+        std_home_defence = numpyro.sample(
+            "std_home_defence", dist.HalfNormal(scale=1.0)
+        )
+        std_away_defence = numpyro.sample(
+            "std_away_defence", dist.HalfNormal(scale=1.0)
+        )
+        mean_attack = numpyro.sample("mean_attack", dist.Normal(loc=0.0, scale=1.0))
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
-
-        mean_home_advantage = numpyro.sample(
-            "mean_home_advantage", dist.Normal(0.1, 0.2)
-        )
 
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
@@ -92,7 +109,7 @@ class NeutralDixonColesMatchPredictor:
                 standardised_covariates, defence_coefficients[..., None]
             ).squeeze(-1)
         else:
-            attack_prior_mean = 0.0
+            attack_prior_mean = mean_attack
             defence_prior_mean = mean_defence
 
         with numpyro.plate("teams", num_teams):
@@ -106,31 +123,33 @@ class NeutralDixonColesMatchPredictor:
                 ),
             )
 
-            with reparam(config={"home_attack_advantage": LocScaleReparam(centered=0)}):
-                home_attack_advantage = numpyro.sample(
-                    "home_attack_advantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+            with reparam(
+                config={"home_attack": LocScaleReparam(centered=0)}
+            ):
+                home_attack = numpyro.sample(
+                    "home_attack",
+                    dist.Normal(mean_home_attack, std_home_attack),
                 )
             with reparam(
-                config={"away_attack_disadvantage": LocScaleReparam(centered=0)}
+                config={"away_attack": LocScaleReparam(centered=0)}
             ):
-                away_attack_disadvantage = numpyro.sample(
-                    "away_attack_disadvantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+                away_attack = numpyro.sample(
+                    "away_attack",
+                    dist.Normal(mean_away_attack, std_away_attack),
                 )
             with reparam(
-                config={"home_defence_advantage": LocScaleReparam(centered=0)}
+                config={"home_defence": LocScaleReparam(centered=0)}
             ):
-                home_defence_advantage = numpyro.sample(
-                    "home_defence_advantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+                home_defence = numpyro.sample(
+                    "home_defence",
+                    dist.Normal(mean_home_defence, std_home_defence),
                 )
             with reparam(
-                config={"away_defence_disadvantage": LocScaleReparam(centered=0)}
+                config={"away_defence": LocScaleReparam(centered=0)}
             ):
-                away_defence_disadvantage = numpyro.sample(
-                    "away_defence_disadvantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+                away_defence = numpyro.sample(
+                    "away_defence",
+                    dist.Normal(mean_away_defence, std_away_defence),
                 )
         attack = numpyro.deterministic(
             "attack", attack_prior_mean + standardised_attack * std_attack
@@ -138,18 +157,25 @@ class NeutralDixonColesMatchPredictor:
         defence = numpyro.deterministic(
             "defence", defence_prior_mean + standardised_defence * std_defence
         )
-
+        
         expected_home_goals = jnp.exp(
             attack[home_team]
             - defence[away_team]
-            + (1 - neutral_venue) * home_attack_advantage[home_team]
-            + (1 - neutral_venue) * away_defence_disadvantage[away_team]
+            + (1 - neutral_venue) * home_attack[home_team]
+            - (1 - neutral_venue) * away_defence[away_team]
         )
         expected_away_goals = jnp.exp(
             attack[away_team]
             - defence[home_team]
-            - (1 - neutral_venue) * away_attack_disadvantage[away_team]
-            - (1 - neutral_venue) * home_defence_advantage[home_team]
+            + (1 - neutral_venue) * away_attack[away_team]
+            - (1 - neutral_venue) * home_defence[home_team]
+        )
+        
+        numpyro.sample(
+            "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
+        )
+        numpyro.sample(
+            "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
 
         # FIXME: this is because the priors allow crazy simulated data before inference
@@ -163,6 +189,7 @@ class NeutralDixonColesMatchPredictor:
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
 
+        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
