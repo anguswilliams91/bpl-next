@@ -29,19 +29,26 @@ class NeutralDixonColesMatchPredictor:
         self.teams = None
         self.attack = None
         self.defence = None
-        self.home_attack_advantage = None
-        self.away_attack_disadvantage = None
-        self.home_defence_advantage = None
-        self.away_defence_disadvantage = None
+        self.home_attack = None
+        self.away_attack = None
+        self.home_defence = None
+        self.away_defence = None
         self.corr_coef = None
         self.rho = None
         self.attack_coefficients = None
         self.defence_coefficients = None
+        self.mean_attack = None
         self.mean_defence = None
-        self.std_defence = None
         self.std_attack = None
-        self.mean_home_advantage = None
-        self.std_home_advantage = None
+        self.std_defence = None
+        self.mean_home_attack = None
+        self.mean_away_attack = None
+        self.mean_home_defence = None
+        self.mean_away_defence = None
+        self.std_home_attack = None
+        self.std_away_attack = None
+        self.std_home_defence = None
+        self.std_away_defence = None
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
@@ -239,19 +246,29 @@ class NeutralDixonColesMatchPredictor:
         samples = mcmc.get_samples()
         self.attack = samples["attack"]
         self.defence = samples["defence"]
-        self.home_attack_advantage = samples["home_attack_advantage"]
-        self.away_attack_disadvantage = samples["away_attack_disadvantage"]
-        self.home_defence_advantage = samples["home_defence_advantage"]
-        self.away_defence_disadvantage = samples["away_defence_disadvantage"]
+        self.home_attack = samples["home_attack"]
+        self.away_attack = samples["away_attack"]
+        self.home_defence = samples["home_defence"]
+        self.away_defence = samples["away_defence"]
         self.corr_coef = samples["corr_coef"]
+        self.u = samples["u"]
         self.rho = samples["rho"]
         self.attack_coefficients = samples.get("attack_coefficients", None)
         self.defence_coefficients = samples.get("defence_coefficients", None)
+        # self.mean_attack = samples["mean_attack"]
         self.mean_defence = samples["mean_defence"]
-        self.std_defence = samples["std_defence"]
         self.std_attack = samples["std_attack"]
-        self.mean_home_advantage = samples["mean_home_advantage"]
-        self.std_home_advantage = samples["std_home_advantage"]
+        self.std_defence = samples["std_defence"]
+        self.mean_home_attack = samples["mean_home_attack"]
+        self.mean_away_attack = samples["mean_away_attack"]
+        self.mean_home_defence = samples["mean_home_defence"]
+        self.mean_away_defence = samples["mean_away_defence"]
+        self.std_home_attack = samples["std_home_attack"]
+        self.std_home_defence = samples["std_home_defence"]
+        self.std_away_attack = samples["std_away_attack"]
+        self.std_away_defence = samples["std_away_defence"]
+        self.standardised_attack = samples["standardised_attack"]
+        self.standardised_defence = samples["standardised_defence"]
 
         return self
 
@@ -272,14 +289,14 @@ class NeutralDixonColesMatchPredictor:
         home_rate = jnp.exp(
             attack_home
             - defence_away
-            + (1 - neutral_venue) * self.home_attack_advantage[:, home_ind]
-            + (1 - neutral_venue) * self.away_defence_disadvantage[:, away_ind]
+            + (1 - neutral_venue) * self.home_attack[:, home_ind]
+            + (1 - neutral_venue) * self.away_defence[:, away_ind]
         )
         away_rate = jnp.exp(
             attack_away
             - defence_home
-            - (1 - neutral_venue) * self.away_attack_disadvantage[:, away_ind]
-            - (1 - neutral_venue) * self.home_defence_advantage[:, home_ind]
+            - (1 - neutral_venue) * self.away_attack[:, away_ind]
+            - (1 - neutral_venue) * self.home_defence[:, home_ind]
         )
 
         return home_rate, away_rate
@@ -343,17 +360,17 @@ class NeutralDixonColesMatchPredictor:
         log_b_tilde = np.random.normal(
             loc=self.rho * log_a_tilde, scale=np.sqrt(1 - self.rho**2.0)
         )
-        home_attack_advantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        home_attack = np.random.normal(
+            loc=self.mean_home, scale=self.std_home
         )
-        away_attack_disadvantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        away_attack = np.random.normal(
+            loc=self.mean_home, scale=self.std_home
         )
-        home_defence_advantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        home_defence = np.random.normal(
+            loc=self.mean_home, scale=self.std_home
         )
-        away_defence_disadvantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        away_defence = np.random.normal(
+            loc=self.mean_home, scale=self.std_home
         )
         attack = mean_attack + log_a_tilde * self.std_attack
         defence = mean_defence + log_b_tilde * self.std_defence
@@ -361,17 +378,17 @@ class NeutralDixonColesMatchPredictor:
         self.teams.append(team_name)
         self.attack = jnp.concatenate((self.attack, attack[:, None]), axis=1)
         self.defence = jnp.concatenate((self.defence, defence[:, None]), axis=1)
-        self.home_attack_advantage = jnp.concatenate(
-            (self.home_attack_advantage, home_attack_advantage[:, None]), axis=1
+        self.home_attack = jnp.concatenate(
+            (self.home_attack, home_attack[:, None]), axis=1
         )
-        self.away_attack_disadvantage = jnp.concatenate(
-            (self.away_attack_disadvantage, away_attack_disadvantage[:, None]), axis=1
+        self.away_attack = jnp.concatenate(
+            (self.away_attack, away_attack[:, None]), axis=1
         )
-        self.home_defence_advantage = jnp.concatenate(
-            (self.home_defence_advantage, home_defence_advantage[:, None]), axis=1
+        self.home_defence = jnp.concatenate(
+            (self.home_defence, home_defence[:, None]), axis=1
         )
-        self.away_defence_disadvantage = jnp.concatenate(
-            (self.away_defence_disadvantage, away_defence_disadvantage[:, None]), axis=1
+        self.away_defence = jnp.concatenate(
+            (self.away_defence, away_defence[:, None]), axis=1
         )
 
     def predict_outcome_proba(
