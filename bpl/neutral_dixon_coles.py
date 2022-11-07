@@ -80,7 +80,7 @@ class NeutralDixonColesMatchPredictor:
         std_away_defence = numpyro.sample(
             "std_away_defence", dist.HalfNormal(scale=1.0)
         )
-        mean_attack = numpyro.sample("mean_attack", dist.Normal(loc=0.0, scale=1.0))
+        mean_attack = 0.0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
