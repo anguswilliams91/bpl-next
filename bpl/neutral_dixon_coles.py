@@ -170,13 +170,6 @@ class NeutralDixonColesMatchPredictor:
             + (1 - neutral_venue) * away_attack[away_team]
             - (1 - neutral_venue) * home_defence[home_team]
         )
-        
-        numpyro.sample(
-            "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
-        )
-        numpyro.sample(
-            "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
-        )
 
         # FIXME: this is because the priors allow crazy simulated data before inference
         expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
