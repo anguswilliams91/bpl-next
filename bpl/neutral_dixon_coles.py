@@ -177,7 +177,7 @@ class NeutralDixonColesMatchPredictor:
         num_samples: int = 1000,
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> ExtendedDixonColesMatchPredictor:
+    ) -> NeutralDixonColesMatchPredictor:
 
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
