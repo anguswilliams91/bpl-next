@@ -295,7 +295,7 @@ class NeutralDixonColesMatchPredictor:
         away_rate = jnp.exp(
             attack_away
             - defence_home
-            - (1 - neutral_venue) * self.away_attack[:, away_ind]
+            + (1 - neutral_venue) * self.away_attack[:, away_ind]
             - (1 - neutral_venue) * self.home_defence[:, home_ind]
         )
 
