@@ -25,24 +25,18 @@ def dixon_coles_correlation_term(
     corr_term = corr_term.at[..., nil_nil].set(
         jnp.log(
             1.0
-            - corr_coef[..., None]
-            * home_rate[..., nil_nil]
-            * away_rate[..., nil_nil],
+            - corr_coef[..., None] * home_rate[..., nil_nil] * away_rate[..., nil_nil],
         )
     )
 
     one_nil = (home_goals == 1) & (away_goals == 0)
     corr_term = corr_term.at[..., one_nil].set(
-        jnp.log(
-            1.0 + corr_coef[..., None] * away_rate[..., one_nil]
-        ),
+        jnp.log(1.0 + corr_coef[..., None] * away_rate[..., one_nil]),
     )
 
     nil_one = (home_goals == 0) & (away_goals == 1)
     corr_term = corr_term.at[..., nil_one].set(
-        jnp.log(
-            1.0 + corr_coef[..., None] * home_rate[..., nil_one]
-        ),
+        jnp.log(1.0 + corr_coef[..., None] * home_rate[..., nil_one]),
     )
 
     one_one = (home_goals == 1) & (away_goals == 1)
@@ -51,3 +45,17 @@ def dixon_coles_correlation_term(
     )
 
     return corr_term
+
+
+def compute_corr_coef_bounds(
+    expected_home_goals: jnp.array, expected_away_goals: jnp.array
+):
+    UB = jnp.min(
+        jnp.array([jnp.min(1.0 / (expected_home_goals * expected_away_goals)), 1])
+    )
+    LB = jnp.max(
+        jnp.array(
+            [jnp.max(-1.0 / expected_home_goals), jnp.max(-1.0 / expected_away_goals)]
+        )
+    )
+    return LB, UB

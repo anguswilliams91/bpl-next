@@ -12,7 +12,7 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import dixon_coles_correlation_term
+from bpl._util import dixon_coles_correlation_term, compute_corr_coef_bounds
 from bpl.base import BaseMatchPredictor
 
 __all__ = ["DixonColesMatchPredictor"]
@@ -41,7 +41,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         mean_defence = numpyro.sample("mean_defence", dist.Normal(0.0, 1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(1.0))
-        
+
         with numpyro.plate("teams", num_teams):
             with reparam(
                 config={
@@ -67,14 +67,11 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         )
 
         # impose bounds on the correlation coefficient
-        corr_coef_raw = numpyro.sample("corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0))
-        UB = jnp.min(jnp.array([jnp.min(1.0/(expected_home_goals*expected_away_goals)),
-                                1]))
-        LB = jnp.max(jnp.array([jnp.max(-1.0/expected_home_goals),
-                                jnp.max(-1.0/expected_away_goals)]))
-        corr_coef = numpyro.deterministic(
-            "corr_coef", LB + corr_coef_raw * (UB-LB)
+        corr_coef_raw = numpyro.sample(
+            "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
         )
+        LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
+        corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )

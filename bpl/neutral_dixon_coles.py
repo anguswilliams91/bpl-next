@@ -12,7 +12,7 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import dixon_coles_correlation_term
+from bpl._util import dixon_coles_correlation_term, compute_corr_coef_bounds
 from bpl.base import MAX_GOALS
 
 __all__ = ["NeutralDixonColesMatchPredictor"]
@@ -63,24 +63,12 @@ class NeutralDixonColesMatchPredictor:
         neutral_venue: Iterable[int],
         team_covariates: Optional[np.array],
     ):
-        mean_home_attack = numpyro.sample(
-            "mean_home_attack", dist.Normal(0.1, 0.2)
-        )
-        mean_away_attack = numpyro.sample(
-            "mean_away_attack", dist.Normal(-0.1, 0.2)
-        )
-        mean_home_defence = numpyro.sample(
-            "mean_home_defence", dist.Normal(0.1, 0.2)
-        )
-        mean_away_defence = numpyro.sample(
-            "mean_away_defence", dist.Normal(-0.1, 0.2)
-        )
-        std_home_attack = numpyro.sample(
-            "std_home_attack", dist.HalfNormal(scale=1.0)
-        )
-        std_away_attack = numpyro.sample(
-            "std_away_attack", dist.HalfNormal(scale=1.0)
-        )
+        mean_home_attack = numpyro.sample("mean_home_attack", dist.Normal(0.1, 0.2))
+        mean_away_attack = numpyro.sample("mean_away_attack", dist.Normal(-0.1, 0.2))
+        mean_home_defence = numpyro.sample("mean_home_defence", dist.Normal(0.1, 0.2))
+        mean_away_defence = numpyro.sample("mean_away_defence", dist.Normal(-0.1, 0.2))
+        std_home_attack = numpyro.sample("std_home_attack", dist.HalfNormal(scale=1.0))
+        std_away_attack = numpyro.sample("std_away_attack", dist.HalfNormal(scale=1.0))
         std_home_defence = numpyro.sample(
             "std_home_defence", dist.HalfNormal(scale=1.0)
         )
@@ -130,30 +118,22 @@ class NeutralDixonColesMatchPredictor:
                 ),
             )
 
-            with reparam(
-                config={"home_attack": LocScaleReparam(centered=0)}
-            ):
+            with reparam(config={"home_attack": LocScaleReparam(centered=0)}):
                 home_attack = numpyro.sample(
                     "home_attack",
                     dist.Normal(mean_home_attack, std_home_attack),
                 )
-            with reparam(
-                config={"away_attack": LocScaleReparam(centered=0)}
-            ):
+            with reparam(config={"away_attack": LocScaleReparam(centered=0)}):
                 away_attack = numpyro.sample(
                     "away_attack",
                     dist.Normal(mean_away_attack, std_away_attack),
                 )
-            with reparam(
-                config={"home_defence": LocScaleReparam(centered=0)}
-            ):
+            with reparam(config={"home_defence": LocScaleReparam(centered=0)}):
                 home_defence = numpyro.sample(
                     "home_defence",
                     dist.Normal(mean_home_defence, std_home_defence),
                 )
-            with reparam(
-                config={"away_defence": LocScaleReparam(centered=0)}
-            ):
+            with reparam(config={"away_defence": LocScaleReparam(centered=0)}):
                 away_defence = numpyro.sample(
                     "away_defence",
                     dist.Normal(mean_away_defence, std_away_defence),
@@ -164,7 +144,7 @@ class NeutralDixonColesMatchPredictor:
         defence = numpyro.deterministic(
             "defence", defence_prior_mean + standardised_defence * std_defence
         )
-        
+
         expected_home_goals = jnp.exp(
             attack[home_team]
             - defence[away_team]
@@ -177,23 +157,20 @@ class NeutralDixonColesMatchPredictor:
             + (1 - neutral_venue) * away_attack[away_team]
             - (1 - neutral_venue) * home_defence[home_team]
         )
-        
+
         numpyro.sample(
             "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
         )
         numpyro.sample(
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
-        
+
         # impose bounds on the correlation coefficient
-        corr_coef_raw = numpyro.sample("corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0))
-        UB = jnp.min(jnp.array([jnp.min(1.0/(expected_home_goals*expected_away_goals)),
-                                1]))
-        LB = jnp.max(jnp.array([jnp.max(-1.0/expected_home_goals),
-                                jnp.max(-1.0/expected_away_goals)]))
-        corr_coef = numpyro.deterministic(
-            "corr_coef", LB + corr_coef_raw * (UB-LB)
+        corr_coef_raw = numpyro.sample(
+            "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
         )
+        LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
+        corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
@@ -364,18 +341,10 @@ class NeutralDixonColesMatchPredictor:
         log_b_tilde = np.random.normal(
             loc=self.rho * log_a_tilde, scale=np.sqrt(1 - self.rho**2.0)
         )
-        home_attack = np.random.normal(
-            loc=self.mean_home, scale=self.std_home
-        )
-        away_attack = np.random.normal(
-            loc=self.mean_home, scale=self.std_home
-        )
-        home_defence = np.random.normal(
-            loc=self.mean_home, scale=self.std_home
-        )
-        away_defence = np.random.normal(
-            loc=self.mean_home, scale=self.std_home
-        )
+        home_attack = np.random.normal(loc=self.mean_home, scale=self.std_home)
+        away_attack = np.random.normal(loc=self.mean_home, scale=self.std_home)
+        home_defence = np.random.normal(loc=self.mean_home, scale=self.std_home)
+        away_defence = np.random.normal(loc=self.mean_home, scale=self.std_home)
         attack = mean_attack + log_a_tilde * self.std_attack
         defence = mean_defence + log_b_tilde * self.std_defence
 
