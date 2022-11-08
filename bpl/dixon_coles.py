@@ -1,7 +1,7 @@
 """Implementation of a simple team level model."""
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Optional, Union
+from typing import Any, Dict, Iterable, Optional, Union, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -37,12 +37,11 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         home_goals: Iterable[int],
         away_goals: Iterable[int],
     ):
+        home_advantage = numpyro.sample("home_advantage", dist.Normal(0.1, 0.2))
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(0.0, 1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(1.0))
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(0.0, 1.0))
-        home_advantage = numpyro.sample("home_advantage", dist.Normal(0.1, 0.2))
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
-
+        
         with numpyro.plate("teams", num_teams):
             with reparam(
                 config={
@@ -67,6 +66,15 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
 
+        # impose bounds on the correlation coefficient
+        corr_coef_raw = numpyro.sample("corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0))
+        UB = jnp.min(jnp.array([jnp.min(1.0/(expected_home_goals*expected_away_goals)),
+                                1]))
+        LB = jnp.max(jnp.array([jnp.max(-1.0/expected_home_goals),
+                                jnp.max(-1.0/expected_away_goals)]))
+        corr_coef = numpyro.deterministic(
+            "corr_coef", LB + corr_coef_raw * (UB-LB)
+        )
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
@@ -118,7 +126,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
 
     def _calculate_expected_goals(
         self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
-    ) -> (jnp.array, jnp.array):
+    ) -> Tuple[jnp.array, jnp.array]:
 
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])

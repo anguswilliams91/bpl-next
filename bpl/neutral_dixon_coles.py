@@ -177,19 +177,23 @@ class NeutralDixonColesMatchPredictor:
             + (1 - neutral_venue) * away_attack[away_team]
             - (1 - neutral_venue) * home_defence[home_team]
         )
-
-        # FIXME: this is because the priors allow crazy simulated data before inference
-        expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
-        expected_away_goals = jnp.clip(expected_away_goals, a_max=15.0)
-
+        
         numpyro.sample(
             "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
         )
         numpyro.sample(
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
-
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
+        
+        # impose bounds on the correlation coefficient
+        corr_coef_raw = numpyro.sample("corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0))
+        UB = jnp.min(jnp.array([jnp.min(1.0/(expected_home_goals*expected_away_goals)),
+                                1]))
+        LB = jnp.max(jnp.array([jnp.max(-1.0/expected_home_goals),
+                                jnp.max(-1.0/expected_away_goals)]))
+        corr_coef = numpyro.deterministic(
+            "corr_coef", LB + corr_coef_raw * (UB-LB)
+        )
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
