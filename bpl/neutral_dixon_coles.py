@@ -1,3 +1,4 @@
+"""Implementation of the neutral model in the current version of bpl."""
 from __future__ import annotations
 
 import warnings
@@ -18,6 +19,7 @@ from bpl.base import MAX_GOALS
 __all__ = ["NeutralDixonColesMatchPredictor"]
 
 
+# pylint: disable=too-many-instance-attributes
 class NeutralDixonColesMatchPredictor:
     """
     A Dixon-Coles like model for predicting match outcomes, modified to:
@@ -25,6 +27,7 @@ class NeutralDixonColesMatchPredictor:
     - Add separate home & away, defence & attack, advantages/disadvantages for each team
     """
 
+    # pylint: disable=duplicate-code
     def __init__(self):
         self.teams = None
         self.attack = None
@@ -34,6 +37,7 @@ class NeutralDixonColesMatchPredictor:
         self.home_defence = None
         self.away_defence = None
         self.corr_coef = None
+        self.u = None
         self.rho = None
         self.attack_coefficients = None
         self.defence_coefficients = None
@@ -49,10 +53,12 @@ class NeutralDixonColesMatchPredictor:
         self.std_away_attack = None
         self.std_home_defence = None
         self.std_away_defence = None
+        self.standardised_attack = None
+        self.standardised_defence = None
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -176,7 +182,7 @@ class NeutralDixonColesMatchPredictor:
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments
+    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -341,10 +347,18 @@ class NeutralDixonColesMatchPredictor:
         log_b_tilde = np.random.normal(
             loc=self.rho * log_a_tilde, scale=np.sqrt(1 - self.rho**2.0)
         )
-        home_attack = np.random.normal(loc=self.mean_home, scale=self.std_home)
-        away_attack = np.random.normal(loc=self.mean_home, scale=self.std_home)
-        home_defence = np.random.normal(loc=self.mean_home, scale=self.std_home)
-        away_defence = np.random.normal(loc=self.mean_home, scale=self.std_home)
+        home_attack = np.random.normal(
+            loc=self.mean_home_attack, scale=self.std_home_attack
+        )
+        away_attack = np.random.normal(
+            loc=self.mean_away_attack, scale=self.std_away_attack
+        )
+        home_defence = np.random.normal(
+            loc=self.mean_home_defence, scale=self.std_home_defence
+        )
+        away_defence = np.random.normal(
+            loc=self.mean_away_defence, scale=self.std_away_defence
+        )
         attack = mean_attack + log_a_tilde * self.std_attack
         defence = mean_defence + log_b_tilde * self.std_defence
 

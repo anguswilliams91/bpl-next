@@ -21,6 +21,7 @@ __all__ = ["DixonColesMatchPredictor"]
 class DixonColesMatchPredictor(BaseMatchPredictor):
     """A Dixon-Coles like model for predicting match outcomes."""
 
+    # pylint: disable=duplicate-code
     def __init__(self):
         self.teams = None
         self.attack = None
@@ -28,7 +29,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self.home_advantage = None
         self.corr_coef = None
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -77,7 +78,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments
+    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],

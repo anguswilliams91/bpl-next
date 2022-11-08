@@ -19,9 +19,11 @@ from bpl.base import BaseMatchPredictor
 __all__ = ["ExtendedDixonColesMatchPredictor"]
 
 
+# pylint: disable=too-many-instance-attributes
 class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     """A Dixon-Coles like model for predicting match outcomes."""
 
+    # pylint: disable=duplicate-code
     def __init__(self):
         self.teams = None
         self.attack = None
@@ -39,7 +41,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -132,7 +134,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments
+    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -241,16 +243,18 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
 
-    def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
+    def add_new_team(
+        self, team_name: str, team_covariates: Optional[np.array] = None
+    ) -> None:
         if team_name in self.teams:
-            raise ValueError("Team {} already known to model.".format(team_name))
+            raise ValueError(f"Team {team_name} already known to model.")
 
         if self.attack_coefficients is not None:
             if team_covariates is None:
                 warnings.warn(
-                    "You haven't provided features for {}."
+                    f"You haven't provided features for {team_name}."
                     " Assuming team_covariates are the average of known teams."
-                    " For better forecasts, provide team_covariates.".format(team_name)
+                    " For better forecasts, provide team_covariates."
                 )
                 team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
             else:

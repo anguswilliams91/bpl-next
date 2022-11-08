@@ -1,13 +1,16 @@
 """Private utility functions."""
-from typing import Iterable, Union, Tuple
+from typing import Iterable, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
 
+
 def compute_corr_coef_bounds(
     expected_home_goals: jnp.array, expected_away_goals: jnp.array
 ) -> Tuple[float, float]:
-    # computes the bounds of the correlation coefficient from dixon and coles paper
+    """
+    Computes the bounds of the correlation coefficient from dixon and coles paper
+    """
     UB = jnp.min(
         jnp.array([jnp.min(1.0 / (expected_home_goals * expected_away_goals)), 1])
     )
@@ -18,6 +21,7 @@ def compute_corr_coef_bounds(
     )
     return LB, UB
 
+
 def dixon_coles_correlation_term(
     home_goals: Union[int, Iterable[int]],
     away_goals: Union[int, Iterable[int]],
@@ -25,7 +29,9 @@ def dixon_coles_correlation_term(
     away_rate: jnp.array,
     corr_coef: jnp.array,
 ) -> jnp.array:
-    # correlation term from dixon and coles paper
+    """
+    Calculate correlation term from dixon and coles paper
+    """
     if isinstance(home_goals, int):
         home_goals = np.array(home_goals).reshape((1,))
     if isinstance(away_goals, int):
