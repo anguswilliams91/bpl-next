@@ -1,7 +1,7 @@
 """Implementation of a simple team level model."""
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Optional, Union
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -12,7 +12,7 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import dixon_coles_correlation_term
+from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term
 from bpl.base import BaseMatchPredictor
 
 __all__ = ["DixonColesMatchPredictor"]
@@ -21,6 +21,7 @@ __all__ = ["DixonColesMatchPredictor"]
 class DixonColesMatchPredictor(BaseMatchPredictor):
     """A Dixon-Coles like model for predicting match outcomes."""
 
+    # pylint: disable=duplicate-code
     def __init__(self):
         self.teams = None
         self.attack = None
@@ -28,7 +29,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self.home_advantage = None
         self.corr_coef = None
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -37,11 +38,10 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         home_goals: Iterable[int],
         away_goals: Iterable[int],
     ):
+        home_advantage = numpyro.sample("home_advantage", dist.Normal(0.1, 0.2))
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(0.0, 1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(1.0))
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(0.0, 1.0))
-        home_advantage = numpyro.sample("home_advantage", dist.Normal(0.1, 0.2))
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
 
         with numpyro.plate("teams", num_teams):
             with reparam(
@@ -67,12 +67,18 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
 
+        # impose bounds on the correlation coefficient
+        corr_coef_raw = numpyro.sample(
+            "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
+        )
+        LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
+        corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments
+    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -118,7 +124,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
 
     def _calculate_expected_goals(
         self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
-    ) -> (jnp.array, jnp.array):
+    ) -> Tuple[jnp.array, jnp.array]:
 
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])

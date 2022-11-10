@@ -13,15 +13,17 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import dixon_coles_correlation_term
+from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term
 from bpl.base import BaseMatchPredictor
 
 __all__ = ["ExtendedDixonColesMatchPredictor"]
 
 
+# pylint: disable=too-many-instance-attributes
 class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     """A Dixon-Coles like model for predicting match outcomes."""
 
+    # pylint: disable=duplicate-code
     def __init__(self):
         self.teams = None
         self.attack = None
@@ -39,7 +41,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -49,18 +51,15 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         away_goals: Iterable[int],
         team_covariates: Optional[np.array],
     ):
-        std_home_advantage = numpyro.sample(
-            "std_home_advantage", dist.HalfNormal(scale=1.0)
-        )
-        std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
-        std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
-
         mean_home_advantage = numpyro.sample(
             "mean_home_advantage", dist.Normal(0.1, 0.2)
         )
-
+        std_home_advantage = numpyro.sample(
+            "std_home_advantage", dist.HalfNormal(scale=1.0)
+        )
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
+        std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
+        std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
 
@@ -117,10 +116,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         )
         expected_away_goals = jnp.exp(attack[away_team] - defence[home_team])
 
-        # FIXME: this is because the priors allow crazy simulated data before inference
-        expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
-        expected_away_goals = jnp.clip(expected_away_goals, a_max=15.0)
-
         numpyro.sample(
             "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
         )
@@ -128,12 +123,18 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
 
+        # impose bounds on the correlation coefficient
+        corr_coef_raw = numpyro.sample(
+            "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
+        )
+        LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
+        corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments
+    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -242,16 +243,18 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
 
-    def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
+    def add_new_team(
+        self, team_name: str, team_covariates: Optional[np.array] = None
+    ) -> None:
         if team_name in self.teams:
-            raise ValueError("Team {} already known to model.".format(team_name))
+            raise ValueError(f"Team {team_name} already known to model.")
 
         if self.attack_coefficients is not None:
             if team_covariates is None:
                 warnings.warn(
-                    "You haven't provided features for {}."
+                    f"You haven't provided features for {team_name}."
                     " Assuming team_covariates are the average of known teams."
-                    " For better forecasts, provide team_covariates.".format(team_name)
+                    " For better forecasts, provide team_covariates."
                 )
                 team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
             else:
