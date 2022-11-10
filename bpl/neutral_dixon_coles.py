@@ -1,3 +1,4 @@
+"""Implementation of the neutral model in the current version of bpl."""
 from __future__ import annotations
 
 import warnings
@@ -12,12 +13,13 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import dixon_coles_correlation_term
+from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term
 from bpl.base import MAX_GOALS
 
 __all__ = ["NeutralDixonColesMatchPredictor"]
 
 
+# pylint: disable=too-many-instance-attributes
 class NeutralDixonColesMatchPredictor:
     """
     A Dixon-Coles like model for predicting match outcomes, modified to:
@@ -25,27 +27,38 @@ class NeutralDixonColesMatchPredictor:
     - Add separate home & away, defence & attack, advantages/disadvantages for each team
     """
 
+    # pylint: disable=duplicate-code
     def __init__(self):
         self.teams = None
         self.attack = None
         self.defence = None
-        self.home_attack_advantage = None
-        self.away_attack_disadvantage = None
-        self.home_defence_advantage = None
-        self.away_defence_disadvantage = None
+        self.home_attack = None
+        self.away_attack = None
+        self.home_defence = None
+        self.away_defence = None
         self.corr_coef = None
+        self.u = None
         self.rho = None
         self.attack_coefficients = None
         self.defence_coefficients = None
+        self.mean_attack = None
         self.mean_defence = None
-        self.std_defence = None
         self.std_attack = None
-        self.mean_home_advantage = None
-        self.std_home_advantage = None
+        self.std_defence = None
+        self.mean_home_attack = None
+        self.mean_away_attack = None
+        self.mean_home_defence = None
+        self.mean_away_defence = None
+        self.std_home_attack = None
+        self.std_away_attack = None
+        self.std_home_defence = None
+        self.std_away_defence = None
+        self.standardised_attack = None
+        self.standardised_defence = None
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -56,17 +69,22 @@ class NeutralDixonColesMatchPredictor:
         neutral_venue: Iterable[int],
         team_covariates: Optional[np.array],
     ):
-        std_home_advantage = numpyro.sample(
-            "std_home_advantage", dist.HalfNormal(scale=1.0)
+        mean_home_attack = numpyro.sample("mean_home_attack", dist.Normal(0.1, 0.2))
+        mean_away_attack = numpyro.sample("mean_away_attack", dist.Normal(-0.1, 0.2))
+        mean_home_defence = numpyro.sample("mean_home_defence", dist.Normal(0.1, 0.2))
+        mean_away_defence = numpyro.sample("mean_away_defence", dist.Normal(-0.1, 0.2))
+        std_home_attack = numpyro.sample("std_home_attack", dist.HalfNormal(scale=1.0))
+        std_away_attack = numpyro.sample("std_away_attack", dist.HalfNormal(scale=1.0))
+        std_home_defence = numpyro.sample(
+            "std_home_defence", dist.HalfNormal(scale=1.0)
         )
+        std_away_defence = numpyro.sample(
+            "std_away_defence", dist.HalfNormal(scale=1.0)
+        )
+        mean_attack = 0.0
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
-
-        mean_home_advantage = numpyro.sample(
-            "mean_home_advantage", dist.Normal(0.1, 0.2)
-        )
 
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
@@ -92,7 +110,7 @@ class NeutralDixonColesMatchPredictor:
                 standardised_covariates, defence_coefficients[..., None]
             ).squeeze(-1)
         else:
-            attack_prior_mean = 0.0
+            attack_prior_mean = mean_attack
             defence_prior_mean = mean_defence
 
         with numpyro.plate("teams", num_teams):
@@ -106,31 +124,25 @@ class NeutralDixonColesMatchPredictor:
                 ),
             )
 
-            with reparam(config={"home_attack_advantage": LocScaleReparam(centered=0)}):
-                home_attack_advantage = numpyro.sample(
-                    "home_attack_advantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+            with reparam(config={"home_attack": LocScaleReparam(centered=0)}):
+                home_attack = numpyro.sample(
+                    "home_attack",
+                    dist.Normal(mean_home_attack, std_home_attack),
                 )
-            with reparam(
-                config={"away_attack_disadvantage": LocScaleReparam(centered=0)}
-            ):
-                away_attack_disadvantage = numpyro.sample(
-                    "away_attack_disadvantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+            with reparam(config={"away_attack": LocScaleReparam(centered=0)}):
+                away_attack = numpyro.sample(
+                    "away_attack",
+                    dist.Normal(mean_away_attack, std_away_attack),
                 )
-            with reparam(
-                config={"home_defence_advantage": LocScaleReparam(centered=0)}
-            ):
-                home_defence_advantage = numpyro.sample(
-                    "home_defence_advantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+            with reparam(config={"home_defence": LocScaleReparam(centered=0)}):
+                home_defence = numpyro.sample(
+                    "home_defence",
+                    dist.Normal(mean_home_defence, std_home_defence),
                 )
-            with reparam(
-                config={"away_defence_disadvantage": LocScaleReparam(centered=0)}
-            ):
-                away_defence_disadvantage = numpyro.sample(
-                    "away_defence_disadvantage",
-                    dist.Normal(mean_home_advantage, std_home_advantage),
+            with reparam(config={"away_defence": LocScaleReparam(centered=0)}):
+                away_defence = numpyro.sample(
+                    "away_defence",
+                    dist.Normal(mean_away_defence, std_away_defence),
                 )
         attack = numpyro.deterministic(
             "attack", attack_prior_mean + standardised_attack * std_attack
@@ -142,19 +154,15 @@ class NeutralDixonColesMatchPredictor:
         expected_home_goals = jnp.exp(
             attack[home_team]
             - defence[away_team]
-            + (1 - neutral_venue) * home_attack_advantage[home_team]
-            + (1 - neutral_venue) * away_defence_disadvantage[away_team]
+            + (1 - neutral_venue) * home_attack[home_team]
+            - (1 - neutral_venue) * away_defence[away_team]
         )
         expected_away_goals = jnp.exp(
             attack[away_team]
             - defence[home_team]
-            - (1 - neutral_venue) * away_attack_disadvantage[away_team]
-            - (1 - neutral_venue) * home_defence_advantage[home_team]
+            + (1 - neutral_venue) * away_attack[away_team]
+            - (1 - neutral_venue) * home_defence[home_team]
         )
-
-        # FIXME: this is because the priors allow crazy simulated data before inference
-        expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
-        expected_away_goals = jnp.clip(expected_away_goals, a_max=15.0)
 
         numpyro.sample(
             "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
@@ -163,12 +171,18 @@ class NeutralDixonColesMatchPredictor:
             "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
         )
 
+        # impose bounds on the correlation coefficient
+        corr_coef_raw = numpyro.sample(
+            "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
+        )
+        LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
+        corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments
+    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -219,19 +233,29 @@ class NeutralDixonColesMatchPredictor:
         samples = mcmc.get_samples()
         self.attack = samples["attack"]
         self.defence = samples["defence"]
-        self.home_attack_advantage = samples["home_attack_advantage"]
-        self.away_attack_disadvantage = samples["away_attack_disadvantage"]
-        self.home_defence_advantage = samples["home_defence_advantage"]
-        self.away_defence_disadvantage = samples["away_defence_disadvantage"]
+        self.home_attack = samples["home_attack"]
+        self.away_attack = samples["away_attack"]
+        self.home_defence = samples["home_defence"]
+        self.away_defence = samples["away_defence"]
         self.corr_coef = samples["corr_coef"]
+        self.u = samples["u"]
         self.rho = samples["rho"]
         self.attack_coefficients = samples.get("attack_coefficients", None)
         self.defence_coefficients = samples.get("defence_coefficients", None)
+        # self.mean_attack = samples["mean_attack"]
         self.mean_defence = samples["mean_defence"]
-        self.std_defence = samples["std_defence"]
         self.std_attack = samples["std_attack"]
-        self.mean_home_advantage = samples["mean_home_advantage"]
-        self.std_home_advantage = samples["std_home_advantage"]
+        self.std_defence = samples["std_defence"]
+        self.mean_home_attack = samples["mean_home_attack"]
+        self.mean_away_attack = samples["mean_away_attack"]
+        self.mean_home_defence = samples["mean_home_defence"]
+        self.mean_away_defence = samples["mean_away_defence"]
+        self.std_home_attack = samples["std_home_attack"]
+        self.std_home_defence = samples["std_home_defence"]
+        self.std_away_attack = samples["std_away_attack"]
+        self.std_away_defence = samples["std_away_defence"]
+        self.standardised_attack = samples["standardised_attack"]
+        self.standardised_defence = samples["standardised_defence"]
 
         return self
 
@@ -252,14 +276,14 @@ class NeutralDixonColesMatchPredictor:
         home_rate = jnp.exp(
             attack_home
             - defence_away
-            + (1 - neutral_venue) * self.home_attack_advantage[:, home_ind]
-            + (1 - neutral_venue) * self.away_defence_disadvantage[:, away_ind]
+            + (1 - neutral_venue) * self.home_attack[:, home_ind]
+            - (1 - neutral_venue) * self.away_defence[:, away_ind]
         )
         away_rate = jnp.exp(
             attack_away
             - defence_home
-            - (1 - neutral_venue) * self.away_attack_disadvantage[:, away_ind]
-            - (1 - neutral_venue) * self.home_defence_advantage[:, home_ind]
+            + (1 - neutral_venue) * self.away_attack[:, away_ind]
+            - (1 - neutral_venue) * self.home_defence[:, home_ind]
         )
 
         return home_rate, away_rate
@@ -323,17 +347,17 @@ class NeutralDixonColesMatchPredictor:
         log_b_tilde = np.random.normal(
             loc=self.rho * log_a_tilde, scale=np.sqrt(1 - self.rho**2.0)
         )
-        home_attack_advantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        home_attack = np.random.normal(
+            loc=self.mean_home_attack, scale=self.std_home_attack
         )
-        away_attack_disadvantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        away_attack = np.random.normal(
+            loc=self.mean_away_attack, scale=self.std_away_attack
         )
-        home_defence_advantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        home_defence = np.random.normal(
+            loc=self.mean_home_defence, scale=self.std_home_defence
         )
-        away_defence_disadvantage = np.random.normal(
-            loc=self.mean_home_advantage, scale=self.std_home_advantage
+        away_defence = np.random.normal(
+            loc=self.mean_away_defence, scale=self.std_away_defence
         )
         attack = mean_attack + log_a_tilde * self.std_attack
         defence = mean_defence + log_b_tilde * self.std_defence
@@ -341,17 +365,17 @@ class NeutralDixonColesMatchPredictor:
         self.teams.append(team_name)
         self.attack = jnp.concatenate((self.attack, attack[:, None]), axis=1)
         self.defence = jnp.concatenate((self.defence, defence[:, None]), axis=1)
-        self.home_attack_advantage = jnp.concatenate(
-            (self.home_attack_advantage, home_attack_advantage[:, None]), axis=1
+        self.home_attack = jnp.concatenate(
+            (self.home_attack, home_attack[:, None]), axis=1
         )
-        self.away_attack_disadvantage = jnp.concatenate(
-            (self.away_attack_disadvantage, away_attack_disadvantage[:, None]), axis=1
+        self.away_attack = jnp.concatenate(
+            (self.away_attack, away_attack[:, None]), axis=1
         )
-        self.home_defence_advantage = jnp.concatenate(
-            (self.home_defence_advantage, home_defence_advantage[:, None]), axis=1
+        self.home_defence = jnp.concatenate(
+            (self.home_defence, home_defence[:, None]), axis=1
         )
-        self.away_defence_disadvantage = jnp.concatenate(
-            (self.away_defence_disadvantage, away_defence_disadvantage[:, None]), axis=1
+        self.away_defence = jnp.concatenate(
+            (self.away_defence, away_defence[:, None]), axis=1
         )
 
     def predict_outcome_proba(

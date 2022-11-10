@@ -13,10 +13,10 @@ def model(neutral_dummy_data):
 def test_fit(model):
     assert model.attack is not None
     assert model.defence is not None
-    assert model.home_attack_advantage is not None
-    assert model.home_defence_advantage is not None
-    assert model.away_attack_disadvantage is not None
-    assert model.away_defence_disadvantage is not None
+    assert model.home_attack is not None
+    assert model.home_defence is not None
+    assert model.away_attack is not None
+    assert model.away_defence is not None
     assert model.teams is not None
     assert model.corr_coef is not None
 
