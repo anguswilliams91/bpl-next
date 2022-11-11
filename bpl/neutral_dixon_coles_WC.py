@@ -152,11 +152,14 @@ class NeutralDixonColesMatchPredictorWC:
         defence = numpyro.deterministic(
             "defence", defence_prior_mean + standardised_defence * std_defence
         )
-        
+
         with numpyro.plate("confederations", num_conferences):
-            with reparam(config={"confederation_strength": LocScaleReparam(centered=0)}):
-                confederation_strength = numpyro.sample("confederation_strength",
-                                                        dist.Normal(0.0, 1.0))
+            with reparam(
+                config={"confederation_strength": LocScaleReparam(centered=0)}
+            ):
+                confederation_strength = numpyro.sample(
+                    "confederation_strength", dist.Normal(0.0, 1.0)
+                )
 
         expected_home_goals = jnp.exp(
             attack[home_team]
@@ -213,7 +216,7 @@ class NeutralDixonColesMatchPredictorWC:
         self.teams = sorted(list(set(home_team) | set(away_team)))
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
-        
+
         self.conferences = sorted(list(set(home_team_conf) | set(away_team_conf)))
         # lookup for what each number represents
         self.conferences_ref = dict(zip(range(len(self.conferences)), self.conferences))
@@ -456,7 +459,13 @@ class NeutralDixonColesMatchPredictorWC:
 
         # evaluate the probability of scorelines at each gridpoint
         probs = self.predict_score_proba(
-            home_team_rep, away_team_rep, home_conf_rep, away_conf_rep, x_flat, y_flat, neutral_venue_rep
+            home_team_rep,
+            away_team_rep,
+            home_conf_rep,
+            away_conf_rep,
+            x_flat,
+            y_flat,
+            neutral_venue_rep,
         ).reshape(len(home_team), MAX_GOALS + 1, MAX_GOALS + 1)
 
         # obtain outcome probabilities by summing the appropriate elements of the grid
@@ -505,11 +514,23 @@ class NeutralDixonColesMatchPredictorWC:
 
         probs = (
             self.predict_score_proba(
-                team_rep, opponent_rep, team_conf_rep, opponent_conf_rep, n_rep, x_rep, neutral_venue_rep
+                team_rep,
+                opponent_rep,
+                team_conf_rep,
+                opponent_conf_rep,
+                n_rep,
+                x_rep,
+                neutral_venue_rep,
             )
             if home
             else self.predict_score_proba(
-                opponent_rep, team_rep, opponent_conf_rep, team_conf_rep, x_rep, n_rep, neutral_venue_rep
+                opponent_rep,
+                team_rep,
+                opponent_conf_rep,
+                team_conf_rep,
+                x_rep,
+                n_rep,
+                neutral_venue_rep,
             )
         ).reshape(MAX_GOALS + 1, len(n))
 
@@ -555,11 +576,23 @@ class NeutralDixonColesMatchPredictorWC:
 
         probs = (
             self.predict_score_proba(
-                team_rep, opponent_rep, team_conf_rep, opponent_conf_rep, x_rep, n_rep, neutral_venue_rep
+                team_rep,
+                opponent_rep,
+                team_conf_rep,
+                opponent_conf_rep,
+                x_rep,
+                n_rep,
+                neutral_venue_rep,
             )
             if home
             else self.predict_score_proba(
-                opponent_rep, team_rep, opponent_conf_rep, team_conf_rep, n_rep, x_rep, neutral_venue_rep
+                opponent_rep,
+                team_rep,
+                opponent_conf_rep,
+                team_conf_rep,
+                n_rep,
+                x_rep,
+                neutral_venue_rep,
             )
         ).reshape(MAX_GOALS + 1, len(n))
 
