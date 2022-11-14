@@ -72,7 +72,8 @@ class NeutralDixonColesMatchPredictorWC:
         neutral_venue: Iterable[int],
         time_diff: Iterable[float],
         epsilon: float,
-        team_covariates: Optional[np.array],
+        game_weights: Iterable[float],
+        team_covariates: Optional[np.array] = None,
     ):
         mean_attack = 0.0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
@@ -180,7 +181,7 @@ class NeutralDixonColesMatchPredictorWC:
             - (1 - neutral_venue) * home_defence[home_team]
         )
         
-        weights = jnp.exp(-epsilon*time_diff)
+        weights = jnp.exp(-epsilon*time_diff) * game_weights
         with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(scale=weights):
             numpyro.sample(
                 "home_goals", dist.Poisson(expected_home_goals), obs=home_goals
@@ -204,7 +205,7 @@ class NeutralDixonColesMatchPredictorWC:
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
-        epsilon: float = 0,
+        epsilon: float = 0.0,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
@@ -229,6 +230,7 @@ class NeutralDixonColesMatchPredictorWC:
         away_conf_ind = jnp.array([self.conferences.index(t) for t in away_team_conf])
         
         self.time_diff = training_data["time_diff"]
+        self.game_weights = training_data["game_weights"]
 
         if team_covariates:
             if set(team_covariates.keys()) != set(self.teams):
@@ -260,6 +262,7 @@ class NeutralDixonColesMatchPredictorWC:
             np.array(training_data["neutral_venue"]),
             self.time_diff,
             epsilon,
+            self.game_weights,
             team_covariates=team_covariates,
             **(run_kwargs or {}),
         )
