@@ -180,20 +180,14 @@ class NeutralDixonColesMatchPredictorWC:
             - (1 - neutral_venue) * home_defence[home_team]
         )
         
-        # weights = jnp.exp(-epsilon*time_diff)
-        # with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(scale=weights):
-        #     numpyro.sample(
-        #         "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
-        #     )
-        #     numpyro.sample(
-        #         "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
-        #     )
-        numpyro.sample(
-            "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
-        )
-        numpyro.sample(
-            "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
-        )
+        weights = jnp.exp(-epsilon*time_diff)
+        with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(scale=weights):
+            numpyro.sample(
+                "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
+            )
+            numpyro.sample(
+                "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
+            )
 
         # impose bounds on the correlation coefficient
         corr_coef_raw = numpyro.sample(
