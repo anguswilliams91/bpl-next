@@ -160,7 +160,7 @@ class NeutralDixonColesMatchPredictorWC:
                 config={"confederation_strength": LocScaleReparam(centered=0)}
             ):
                 confederation_strength = numpyro.sample(
-                    "confederation_strength", dist.Normal(0.0, 0.1)
+                    "confederation_strength", dist.Normal(0.0, 1.0)
                 )
 
         expected_home_goals = jnp.exp(
@@ -183,10 +183,10 @@ class NeutralDixonColesMatchPredictorWC:
         weights = jnp.exp(-epsilon*time_diff)
         with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(scale=weights):
             numpyro.sample(
-                "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
+                "home_goals", dist.Poisson(expected_home_goals), obs=home_goals
             )
             numpyro.sample(
-                "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
+                "away_goals", dist.Poisson(expected_away_goals), obs=away_goals
             )
 
         # impose bounds on the correlation coefficient
