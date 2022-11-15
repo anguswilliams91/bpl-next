@@ -43,8 +43,10 @@ class NeutralDixonColesMatchPredictorWC:
         self.defence_coefficients = None
         self.mean_attack = None
         self.mean_defence = None
+        self.mean_conf_strength = None
         self.std_attack = None
         self.std_defence = None
+        self.std_conf_strength = None
         self.mean_home_attack = None
         self.mean_away_attack = None
         self.mean_home_defence = None
@@ -55,6 +57,7 @@ class NeutralDixonColesMatchPredictorWC:
         self.std_away_defence = None
         self.standardised_attack = None
         self.standardised_defence = None
+        self.standardised_conf_strength = None
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
@@ -71,11 +74,14 @@ class NeutralDixonColesMatchPredictorWC:
         away_goals: Iterable[int],
         neutral_venue: Iterable[int],
         team_covariates: Optional[np.array],
+        confederation_covariates: Optional[np.array],
     ):
         mean_attack = 0.0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
+        mean_conf_strength = 0.0
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
+        std_conf_strength = numpyro.sample("std_conf_strength", dist.HalfNormal(scale=1.0))
         mean_home_attack = numpyro.sample("mean_home_attack", dist.Normal(0.1, 0.2))
         mean_away_attack = numpyro.sample("mean_away_attack", dist.Normal(-0.1, 0.2))
         mean_home_defence = numpyro.sample("mean_home_defence", dist.Normal(0.1, 0.2))
@@ -153,13 +159,34 @@ class NeutralDixonColesMatchPredictorWC:
             "defence", defence_prior_mean + standardised_defence * std_defence
         )
 
+        if confederation_covariates is not None:
+            standardised_covariates = (
+                confederation_covariates - confederation_covariates.mean(axis=0)
+            ) / confederation_covariates.std(axis=0)
+            num_covariates = standardised_covariates.shape[1]
+
+            with numpyro.plate("covariates", num_covariates):
+                confederation_coefficients = numpyro.sample(
+                    "confederation_coefficients", dist.Normal(loc=0.0, scale=1.0)
+                )
+            conf_strength_prior_mean = jnp.matmul(
+                standardised_covariates, confederation_coefficients[..., None]
+            ).squeeze(-1)
+        else:
+            conf_streangth_prior_mean = mean_conf_strength
         with numpyro.plate("confederations", num_conferences):
             with reparam(
                 config={"confederation_strength": LocScaleReparam(centered=0)}
             ):
-                confederation_strength = numpyro.sample(
-                    "confederation_strength", dist.Normal(0.0, 1.0)
+                standardised_conf_strength = numpyro.sample(
+                    "standardised_conf_strength", dist.Normal(loc=0.0, scale=1.0)
                 )
+                confederation_strength = numpyro.deterministic(
+                    "confederation_strength", conf_strength_prior_mean + standardised_conf_strength * std_conf_strength
+                )
+#                confederation_strength = numpyro.sample(
+#                    "confederation_strength", dist.Normal(0.0, 1.0)
+#                )
 
         expected_home_goals = jnp.exp(
             attack[home_team]
@@ -210,6 +237,7 @@ class NeutralDixonColesMatchPredictorWC:
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
         team_covariates = training_data.get("team_covariates")
+        confederation_covariates = training_data.get("confederation_covariates")
         home_team_conf = training_data["home_conf"]
         away_team_conf = training_data["away_conf"]
 
@@ -232,6 +260,15 @@ class NeutralDixonColesMatchPredictorWC:
             self._team_covariates_mean = team_covariates.mean(axis=0)
             self._team_covariates_std = team_covariates.std(axis=0)
 
+        if confederation_covariates:
+            if set(confederation_covariates.keys()) != set(self.conferences):
+                raise ValueError(
+                    "confederation_covariates must contain all the confederations in the data."
+                )
+            confederation_covariates = jnp.array([confederation_covariates[c] for c in self.conferences])
+            self._confederation_covariates_mean = confederation_covariates.mean(axis=0)
+            self._confederation_covariates_std = confederation_covariates.std(axis=0)
+
         nuts_kernel = NUTS(self._model)
         mcmc = MCMC(
             nuts_kernel,
@@ -252,6 +289,7 @@ class NeutralDixonColesMatchPredictorWC:
             np.array(training_data["away_goals"]),
             np.array(training_data["neutral_venue"]),
             team_covariates=team_covariates,
+            confederation_covariates=confederation_covariates,
             **(run_kwargs or {}),
         )
 
