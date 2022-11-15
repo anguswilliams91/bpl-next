@@ -180,9 +180,11 @@ class NeutralDixonColesMatchPredictorWC:
             + (1 - neutral_venue) * away_attack[away_team]
             - (1 - neutral_venue) * home_defence[home_team]
         )
-        
-        weights = jnp.exp(-epsilon*time_diff) * game_weights
-        with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(scale=weights):
+
+        weights = jnp.exp(-epsilon * time_diff) * game_weights
+        with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(
+            scale=weights
+        ):
             numpyro.sample(
                 "home_goals", dist.Poisson(expected_home_goals), obs=home_goals
             )
@@ -197,7 +199,12 @@ class NeutralDixonColesMatchPredictorWC:
         LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
         corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
-            home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef,
+            home_goals,
+            away_goals,
+            expected_home_goals,
+            expected_away_goals,
+            corr_coef,
+            weights,
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
@@ -228,7 +235,7 @@ class NeutralDixonColesMatchPredictorWC:
         self.conferences_ref = dict(zip(range(len(self.conferences)), self.conferences))
         home_conf_ind = jnp.array([self.conferences.index(t) for t in home_team_conf])
         away_conf_ind = jnp.array([self.conferences.index(t) for t in away_team_conf])
-        
+
         self.time_diff = training_data["time_diff"]
         self.game_weights = training_data["game_weights"]
 
@@ -295,7 +302,7 @@ class NeutralDixonColesMatchPredictorWC:
         self.standardised_attack = samples["standardised_attack"]
         self.standardised_defence = samples["standardised_defence"]
         self.epsilon = epsilon
-        
+
         return self
 
     def _calculate_expected_goals(
