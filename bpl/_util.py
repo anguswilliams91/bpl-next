@@ -1,5 +1,5 @@
 """Private utility functions."""
-from typing import Optional, Iterable, Tuple, Union
+from typing import Iterable, Optional, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -38,13 +38,14 @@ def dixon_coles_correlation_term(
     if isinstance(away_goals, int):
         away_goals = np.array(away_goals).reshape((1,))
     if weights is None:
-        weights = jnp.zeros(len(home_goals))
-    
+        weights = jnp.ones(len(home_goals))
+
     corr_term = jnp.zeros_like(home_rate)
 
     nil_nil = (home_goals == 0) & (away_goals == 0)
     corr_term = corr_term.at[..., nil_nil].set(
-        weights[..., nil_nil] * jnp.log(
+        weights[..., nil_nil]
+        * jnp.log(
             1.0
             - corr_coef[..., None] * home_rate[..., nil_nil] * away_rate[..., nil_nil],
         )
@@ -52,12 +53,14 @@ def dixon_coles_correlation_term(
 
     one_nil = (home_goals == 1) & (away_goals == 0)
     corr_term = corr_term.at[..., one_nil].set(
-        weights[..., one_nil] * jnp.log(1.0 + corr_coef[..., None] * away_rate[..., one_nil]),
+        weights[..., one_nil]
+        * jnp.log(1.0 + corr_coef[..., None] * away_rate[..., one_nil]),
     )
 
     nil_one = (home_goals == 0) & (away_goals == 1)
     corr_term = corr_term.at[..., nil_one].set(
-        weights[..., nil_one] * jnp.log(1.0 + corr_coef[..., None] * home_rate[..., nil_one]),
+        weights[..., nil_one]
+        * jnp.log(1.0 + corr_coef[..., None] * home_rate[..., nil_one]),
     )
 
     one_one = (home_goals == 1) & (away_goals == 1)
