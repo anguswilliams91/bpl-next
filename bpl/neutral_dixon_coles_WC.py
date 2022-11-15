@@ -70,12 +70,15 @@ class NeutralDixonColesMatchPredictorWC:
         home_goals: Iterable[int],
         away_goals: Iterable[int],
         neutral_venue: Iterable[int],
-        team_covariates: Optional[np.array],
+        time_diff: Iterable[float],
+        epsilon: float,
+        game_weights: Iterable[float],
+        team_covariates: Optional[np.array] = None,
     ):
         mean_attack = 0.0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
-        std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
-        std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
+        std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=0.5))
+        std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=0.5))
         mean_home_attack = numpyro.sample("mean_home_attack", dist.Normal(0.1, 0.2))
         mean_away_attack = numpyro.sample("mean_away_attack", dist.Normal(-0.1, 0.2))
         mean_home_defence = numpyro.sample("mean_home_defence", dist.Normal(0.1, 0.2))
@@ -177,13 +180,15 @@ class NeutralDixonColesMatchPredictorWC:
             + (1 - neutral_venue) * away_attack[away_team]
             - (1 - neutral_venue) * home_defence[home_team]
         )
-
-        numpyro.sample(
-            "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
-        )
-        numpyro.sample(
-            "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
-        )
+        
+        weights = jnp.exp(-epsilon*time_diff) * game_weights
+        with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(scale=weights):
+            numpyro.sample(
+                "home_goals", dist.Poisson(expected_home_goals), obs=home_goals
+            )
+            numpyro.sample(
+                "away_goals", dist.Poisson(expected_away_goals), obs=away_goals
+            )
 
         # impose bounds on the correlation coefficient
         corr_coef_raw = numpyro.sample(
@@ -192,7 +197,7 @@ class NeutralDixonColesMatchPredictorWC:
         LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
         corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
-            home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
+            home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef,
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
@@ -200,6 +205,7 @@ class NeutralDixonColesMatchPredictorWC:
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
+        epsilon: float = 0.0,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
@@ -222,6 +228,9 @@ class NeutralDixonColesMatchPredictorWC:
         self.conferences_ref = dict(zip(range(len(self.conferences)), self.conferences))
         home_conf_ind = jnp.array([self.conferences.index(t) for t in home_team_conf])
         away_conf_ind = jnp.array([self.conferences.index(t) for t in away_team_conf])
+        
+        self.time_diff = training_data["time_diff"]
+        self.game_weights = training_data["game_weights"]
 
         if team_covariates:
             if set(team_covariates.keys()) != set(self.teams):
@@ -251,6 +260,9 @@ class NeutralDixonColesMatchPredictorWC:
             np.array(training_data["home_goals"]),
             np.array(training_data["away_goals"]),
             np.array(training_data["neutral_venue"]),
+            self.time_diff,
+            epsilon,
+            self.game_weights,
             team_covariates=team_covariates,
             **(run_kwargs or {}),
         )
@@ -282,7 +294,8 @@ class NeutralDixonColesMatchPredictorWC:
         self.std_away_defence = samples["std_away_defence"]
         self.standardised_attack = samples["standardised_attack"]
         self.standardised_defence = samples["standardised_defence"]
-
+        self.epsilon = epsilon
+        
         return self
 
     def _calculate_expected_goals(
