@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import warnings
+from datetime import datetime
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import jax
@@ -19,7 +20,7 @@ from bpl.base import MAX_GOALS
 __all__ = ["NeutralDixonColesMatchPredictorWC"]
 
 
-def _str_to_list(**args):
+def _str_to_list(*args):
     return ([x] if isinstance(x, str) else x for x in args)
 
 
@@ -517,7 +518,11 @@ class NeutralDixonColesMatchPredictorWC:
         away_conf: Union[str, Iterable[str]],
         neutral_venue: Union[int, Iterable[int]],
         num_samples: int = 1,
+        random_state: int = None,
     ):
+        if random_state is None:
+            random_state = int(datetime.now().timestamp())
+
         home_team, away_team, home_conf, away_conf = _str_to_list(
             home_team, away_team, home_conf, away_conf
         )
@@ -529,12 +534,18 @@ class NeutralDixonColesMatchPredictorWC:
         away_goals = away_goals.flatten()
         home_sim_score = np.full((len(home_team), num_samples), np.nan)
         away_sim_score = np.full((len(home_team), num_samples), np.nan)
-        score_idx = np.arange((MAX_GOALS + 1) ** 2)
-        rng = np.random.default_rng()
+        rng_key = jax.random.PRNGKey(random_state)
+
         for fixture in range(len(home_team)):
-            sim_idx = rng.choice(
-                score_idx, p=probs[fixture].flatten(), size=num_samples
+            new_key, subkey = jax.random.split(rng_key)
+            sim_idx = jax.random.choice(
+                subkey,
+                (MAX_GOALS + 1) ** 2,
+                shape=(num_samples,),
+                p=probs[fixture].flatten(),
             )
+            rng_key = new_key
+
             home_sim_score[fixture, :] = home_goals[sim_idx]
             away_sim_score[fixture, :] = away_goals[sim_idx]
 
