@@ -19,6 +19,10 @@ from bpl.base import MAX_GOALS
 __all__ = ["NeutralDixonColesMatchPredictorWC"]
 
 
+def _str_to_list(**args):
+    return ([x] if isinstance(x, str) else x for x in args)
+
+
 # pylint: disable=too-many-instance-attributes
 class NeutralDixonColesMatchPredictorWC:
     """
@@ -354,11 +358,9 @@ class NeutralDixonColesMatchPredictorWC:
         away_goals: Union[int, Iterable[int]],
         neutral_venue: Union[int, Iterable[int]],
     ) -> jnp.array:
-
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
-        home_conf = [home_conf] if isinstance(home_conf, str) else home_conf
-        away_conf = [away_conf] if isinstance(away_conf, str) else away_conf
+        home_team, away_team, home_conf, away_conf = _str_to_list(
+            home_team, away_team, home_conf, away_conf
+        )
 
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(
             home_team, away_team, home_conf, away_conf, neutral_venue
@@ -438,6 +440,40 @@ class NeutralDixonColesMatchPredictorWC:
             (self.away_defence, away_defence[:, None]), axis=1
         )
 
+    def predict_score_grid_proba(
+        self, home_team, away_team, home_conf, away_conf, neutral_venue
+    ):
+        """Compute probabilities of all plausible scorelines"""
+        home_team, away_team, home_conf, away_conf = _str_to_list(
+            home_team, away_team, home_conf, away_conf
+        )
+
+        n_goals = np.arange(0, MAX_GOALS + 1)
+        home_goals, away_goals = np.meshgrid(n_goals, n_goals, indexing="ij")
+        home_goals_flat = jnp.tile(
+            home_goals.reshape((MAX_GOALS + 1) ** 2), len(home_team)
+        )
+        away_goals_flat = jnp.tile(
+            away_goals.reshape((MAX_GOALS + 1) ** 2), len(home_team)
+        )
+        home_team_rep = np.repeat(home_team, (MAX_GOALS + 1) ** 2)
+        away_team_rep = np.repeat(away_team, (MAX_GOALS + 1) ** 2)
+        home_conf_rep = np.repeat(home_conf, (MAX_GOALS + 1) ** 2)
+        away_conf_rep = np.repeat(away_conf, (MAX_GOALS + 1) ** 2)
+        neutral_venue_rep = np.repeat(neutral_venue, (MAX_GOALS + 1) ** 2)
+
+        probs = self.predict_score_proba(
+            home_team_rep,
+            away_team_rep,
+            home_conf_rep,
+            away_conf_rep,
+            home_goals_flat,
+            away_goals_flat,
+            neutral_venue_rep,
+        ).reshape(len(home_team), MAX_GOALS + 1, MAX_GOALS + 1)
+
+        return probs, home_goals, away_goals
+
     def predict_outcome_proba(
         self,
         home_team: Union[str, Iterable[str]],
@@ -461,39 +497,48 @@ class NeutralDixonColesMatchPredictorWC:
             Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
                 "away_win" and "draw". Values are probabilities of each outcome.
         """
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
-        home_conf = [home_conf] if isinstance(home_conf, str) else home_conf
-        away_conf = [away_conf] if isinstance(away_conf, str) else away_conf
-
-        # make a grid of scorelines up to plausible limits
-        n_goals = np.arange(0, MAX_GOALS + 1)
-        x, y = np.meshgrid(n_goals, n_goals, indexing="ij")
-        x_flat = jnp.tile(x.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        y_flat = jnp.tile(y.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        home_team_rep = np.repeat(home_team, (MAX_GOALS + 1) ** 2)
-        away_team_rep = np.repeat(away_team, (MAX_GOALS + 1) ** 2)
-        home_conf_rep = np.repeat(home_conf, (MAX_GOALS + 1) ** 2)
-        away_conf_rep = np.repeat(away_conf, (MAX_GOALS + 1) ** 2)
-        neutral_venue_rep = np.repeat(neutral_venue, (MAX_GOALS + 1) ** 2)
-
-        # evaluate the probability of scorelines at each gridpoint
-        probs = self.predict_score_proba(
-            home_team_rep,
-            away_team_rep,
-            home_conf_rep,
-            away_conf_rep,
-            x_flat,
-            y_flat,
-            neutral_venue_rep,
-        ).reshape(len(home_team), MAX_GOALS + 1, MAX_GOALS + 1)
+        # compute probabilities for all scorelines
+        probs, home_goals, away_goals = self.predict_score_grid_proba(
+            home_team, away_team, home_conf, away_conf, neutral_venue
+        )
 
         # obtain outcome probabilities by summing the appropriate elements of the grid
-        prob_home_win = probs[:, x > y].sum(axis=-1)
-        prob_away_win = probs[:, x < y].sum(axis=-1)
-        prob_draw = probs[:, x == y].sum(axis=-1)
+        prob_home_win = probs[:, home_goals > away_goals].sum(axis=-1)
+        prob_away_win = probs[:, home_goals < away_goals].sum(axis=-1)
+        prob_draw = probs[:, home_goals == away_goals].sum(axis=-1)
 
         return {"home_win": prob_home_win, "away_win": prob_away_win, "draw": prob_draw}
+
+    def simulate_score(
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        home_conf: Union[str, Iterable[str]],
+        away_conf: Union[str, Iterable[str]],
+        neutral_venue: Union[int, Iterable[int]],
+        num_samples: int = 1,
+    ):
+        home_team, away_team, home_conf, away_conf = _str_to_list(
+            home_team, away_team, home_conf, away_conf
+        )
+
+        probs, home_goals, away_goals = self.predict_score_grid_proba(
+            home_team, away_team, home_conf, away_conf, neutral_venue
+        )
+        home_goals = home_goals.flatten()
+        away_goals = away_goals.flatten()
+        home_sim_score = np.full((len(home_team), num_samples), np.nan)
+        away_sim_score = np.full((len(home_team), num_samples), np.nan)
+        score_idx = np.arange((MAX_GOALS + 1) ** 2)
+        rng = np.random.default_rng()
+        for fixture in range(len(home_team)):
+            sim_idx = rng.choice(
+                score_idx, p=probs[fixture].flatten(), size=num_samples
+            )
+            home_sim_score[fixture, :] = home_goals[sim_idx]
+            away_sim_score[fixture, :] = away_goals[sim_idx]
+
+        return {"home_score": home_sim_score, "away_score": away_sim_score}
 
     def predict_score_n_proba(
         self,
