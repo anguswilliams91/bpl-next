@@ -24,6 +24,25 @@ def _str_to_list(*args):
     return ([x] if isinstance(x, str) else x for x in args)
 
 
+def _get_sim_score_fun(probs, home_goals, away_goals, num_samples):
+    def _loop_sim_score(i, carry):
+        sim_scores, rng_key = carry
+        new_key, subkey = jax.random.split(rng_key)
+        sim_idx = jax.random.choice(
+            subkey,
+            (MAX_GOALS + 1) ** 2,
+            shape=(num_samples,),
+            p=probs[i].flatten(),  # TODO flatten outside loop
+        )
+        rng_key = new_key
+
+        sim_scores = sim_scores.at[0, i, :].set(home_goals[sim_idx])
+        sim_scores = sim_scores.at[1, i, :].set(away_goals[sim_idx])
+        return sim_scores, rng_key
+
+    return _loop_sim_score
+
+
 # pylint: disable=too-many-instance-attributes
 class NeutralDixonColesMatchPredictorWC:
     """
@@ -530,24 +549,22 @@ class NeutralDixonColesMatchPredictorWC:
         probs, home_goals, away_goals = self.predict_score_grid_proba(
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
-        home_goals = home_goals.flatten()
-        away_goals = away_goals.flatten()
-        home_sim_score = np.full((len(home_team), num_samples), np.nan)
-        away_sim_score = np.full((len(home_team), num_samples), np.nan)
+        home_goals = jnp.array(home_goals.flatten())
+        away_goals = jnp.array(away_goals.flatten())
+        home_sim_score = jnp.full((len(home_team), num_samples), np.nan)
+        away_sim_score = jnp.full((len(home_team), num_samples), np.nan)
+
         rng_key = jax.random.PRNGKey(random_state)
-
-        for fixture in range(len(home_team)):
-            new_key, subkey = jax.random.split(rng_key)
-            sim_idx = jax.random.choice(
-                subkey,
-                (MAX_GOALS + 1) ** 2,
-                shape=(num_samples,),
-                p=probs[fixture].flatten(),
-            )
-            rng_key = new_key
-
-            home_sim_score[fixture, :] = home_goals[sim_idx]
-            away_sim_score[fixture, :] = away_goals[sim_idx]
+        sim_scores = jnp.full((2, len(home_team), num_samples), np.nan)
+        loop_fn = _get_sim_score_fun(probs, home_goals, away_goals, num_samples)
+        sim_scores, rng_key = jax.lax.fori_loop(
+            0,
+            len(home_team),
+            loop_fn,
+            (sim_scores, rng_key),
+        )
+        home_sim_score = sim_scores[0]
+        away_sim_score = sim_scores[1]
 
         return {"home_score": home_sim_score, "away_score": away_sim_score}
 
