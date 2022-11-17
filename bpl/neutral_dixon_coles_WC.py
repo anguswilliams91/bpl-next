@@ -48,7 +48,7 @@ def _get_sim_outcome_fun(probs, num_samples):
         sim_outcome, rng_key = carry
         new_key, subkey = jax.random.split(rng_key)
         sim_idx = jax.random.choice(
-            subkey, (MAX_GOALS + 1) ** 2, shape=(num_samples,), p=probs[i, :]
+            subkey, probs.shape[1], shape=(num_samples,), p=probs[i, :]
         )
         rng_key = new_key
 
