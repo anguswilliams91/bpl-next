@@ -32,7 +32,7 @@ def _get_sim_score_fun(probs, home_goals, away_goals, num_samples):
             subkey,
             (MAX_GOALS + 1) ** 2,
             shape=(num_samples,),
-            p=probs[i].flatten(),  # TODO flatten outside loop
+            p=probs[i].flatten(),  # TODO flatten outside loop?
         )
         rng_key = new_key
 
@@ -41,6 +41,21 @@ def _get_sim_score_fun(probs, home_goals, away_goals, num_samples):
         return sim_scores, rng_key
 
     return _loop_sim_score
+
+
+def _get_sim_outcome_fun(probs, num_samples):
+    def _loop_sim_outcome(i, carry):
+        sim_outcome, rng_key = carry
+        new_key, subkey = jax.random.split(rng_key)
+        sim_idx = jax.random.choice(
+            subkey, (MAX_GOALS + 1) ** 2, shape=(num_samples,), p=probs[i, :]
+        )
+        rng_key = new_key
+
+        sim_outcome = sim_outcome.at[i, :].set(sim_idx)
+        return sim_outcome, rng_key
+
+    return _loop_sim_outcome
 
 
 # pylint: disable=too-many-instance-attributes
@@ -567,6 +582,57 @@ class NeutralDixonColesMatchPredictorWC:
         away_sim_score = sim_scores[1]
 
         return {"home_score": home_sim_score, "away_score": away_sim_score}
+
+    def simulate_outcome(
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        home_conf: Union[str, Iterable[str]],
+        away_conf: Union[str, Iterable[str]],
+        neutral_venue: Union[int, Iterable[int]],
+        knockout: bool = False,
+        num_samples: int = 1,
+        random_state: int = None,
+    ):
+        if random_state is None:
+            random_state = int(datetime.now().timestamp() * 100)
+
+        home_team, away_team, home_conf, away_conf = _str_to_list(
+            home_team, away_team, home_conf, away_conf
+        )
+
+        probs = self.predict_outcome_proba(
+            home_team, away_team, home_conf, away_conf, neutral_venue
+        )
+        probs = jnp.array([probs["home_win"], probs["draw"], probs["away_win"]]).T
+        if knockout:
+            # don't consider draws
+            probs = probs[:, [0, 2]] / (probs[:, 0] + probs[:, 2])
+
+        sim_outcome = jnp.full((len(home_team), num_samples), np.nan)
+        rng_key = jax.random.PRNGKey(random_state)
+        loop_fn = _get_sim_outcome_fun(probs, num_samples)
+        sim_outcome, rng_key = jax.lax.fori_loop(
+            0,
+            len(home_team),
+            loop_fn,
+            (sim_outcome, rng_key),
+        )
+        winner = np.empty((len(home_team), num_samples), dtype=str)
+        home_team_rep = home_team.repeat(num_samples).reshape(
+            (len(home_team), num_samples)
+        )
+        away_team_rep = away_team.repeat(num_samples).reshape(
+            (len(home_team), num_samples)
+        )
+        winner[sim_outcome == 0] = home_team_rep[sim_outcome == 0]
+        if knockout:
+            winner[sim_outcome == 1] = away_team_rep[sim_outcome == 1]
+        else:
+            winner[sim_outcome == 2] = away_team_rep[sim_outcome == 2]
+            winner[sim_outcome == 1] = "Draw"
+
+        return winner
 
     def predict_score_n_proba(
         self,
