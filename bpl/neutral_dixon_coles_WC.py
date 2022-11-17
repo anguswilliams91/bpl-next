@@ -540,7 +540,7 @@ class NeutralDixonColesMatchPredictorWC:
         random_state: int = None,
     ):
         if random_state is None:
-            random_state = int(datetime.now().timestamp())
+            random_state = int(datetime.now().timestamp() * 100)
 
         home_team, away_team, home_conf, away_conf = _str_to_list(
             home_team, away_team, home_conf, away_conf
