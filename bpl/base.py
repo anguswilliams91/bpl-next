@@ -7,7 +7,7 @@ from typing import Dict, Iterable, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 
-MAX_GOALS = 15
+MAX_GOALS = 10
 
 
 class BaseMatchPredictor:
