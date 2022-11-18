@@ -607,7 +607,7 @@ class NeutralDixonColesMatchPredictorWC:
         probs = jnp.array([probs["home_win"], probs["draw"], probs["away_win"]]).T
         if knockout:
             # don't consider draws
-            probs = probs[:, [0, 2]] / (probs[:, 0] + probs[:, 2])
+            probs = probs[:, [0, 2]] / (probs[:, 0] + probs[:, 2])[:, None]
 
         sim_outcome = jnp.full((len(home_team), num_samples), np.nan)
         rng_key = jax.random.PRNGKey(random_state)
@@ -618,7 +618,9 @@ class NeutralDixonColesMatchPredictorWC:
             loop_fn,
             (sim_outcome, rng_key),
         )
-        winner = np.empty((len(home_team), num_samples), dtype=str)
+
+        longest_name = max(len(t) for t in self.teams)
+        winner = np.empty((len(home_team), num_samples), dtype=f"U{longest_name + 1}")
         home_team_rep = home_team.repeat(num_samples).reshape(
             (len(home_team), num_samples)
         )
