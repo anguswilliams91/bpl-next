@@ -1,6 +1,7 @@
 """Private utility functions."""
 from typing import Iterable, Optional, Tuple, Union
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -69,3 +70,18 @@ def dixon_coles_correlation_term(
     )
 
     return corr_term
+
+
+def map_choice(key, a, num_samples, p):
+    def _map_choice_once(probs_and_key):
+        probs, rng_key = probs_and_key
+        choices = jax.random.choice(
+            rng_key,
+            a,
+            shape=(num_samples,),
+            p=probs,
+        )
+        return choices
+
+    new_keys = jax.random.split(key, p.shape[0])
+    return jax.vmap(_map_choice_once)((p, new_keys))

@@ -15,51 +15,14 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term
-from bpl.base import MAX_GOALS
+from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term, map_choice
+from bpl.base import DTYPES, MAX_GOALS
 
 __all__ = ["NeutralDixonColesMatchPredictorWC"]
 
 
 def _str_to_list(*args):
     return ([x] if isinstance(x, str) else x for x in args)
-
-
-def _get_sim_score_fun(probs, home_goals, away_goals, max_goals, num_samples):
-    def _loop_sim_score(i, carry):
-        sim_scores, rng_key = carry
-        new_key, subkey = jax.random.split(rng_key)
-        sim_idx = jax.random.choice(
-            subkey,
-            (max_goals + 1) ** 2,
-            shape=(num_samples,),
-            p=probs[i].flatten(),
-        )
-        rng_key = new_key
-
-        sim_scores = sim_scores.at[0, i, :].set(home_goals[sim_idx])
-        sim_scores = sim_scores.at[1, i, :].set(away_goals[sim_idx])
-        return sim_scores, rng_key
-
-    return _loop_sim_score
-
-
-def _get_sim_outcome_fun(probs, num_samples):
-    def _loop_sim_outcome(i, carry):
-        sim_outcome, rng_key = carry
-        new_key, subkey = jax.random.split(rng_key)
-        sim_idx = jax.random.choice(
-            subkey,
-            jnp.arange(probs.shape[1], dtype="int8"),
-            shape=(num_samples,),
-            p=probs[i, :],
-        )
-        rng_key = new_key
-
-        sim_outcome = sim_outcome.at[i, :].set(sim_idx)
-        return sim_outcome, rng_key
-
-    return _loop_sim_outcome
 
 
 # pylint: disable=too-many-instance-attributes
@@ -275,18 +238,18 @@ class NeutralDixonColesMatchPredictorWC:
 
         self.teams = np.array(sorted(set(home_team) | set(away_team)))
         self._teams_dict = {t: i for i, t in enumerate(self.teams)}
-        home_ind = jnp.array([self._teams_dict[t] for t in home_team], "int16")
-        away_ind = jnp.array([self._teams_dict[t] for t in away_team], "int16")
+        home_ind = jnp.array([self._teams_dict[t] for t in home_team], DTYPES["teams"])
+        away_ind = jnp.array([self._teams_dict[t] for t in away_team], DTYPES["teams"])
 
         self.conferences = np.array(sorted(set(home_team_conf) | set(away_team_conf)))
         self._conferences_dict = {c: i for i, c in enumerate(self.conferences)}
         # lookup for what each number represents
         self.conferences_ref = dict(zip(range(len(self.conferences)), self.conferences))
         home_conf_ind = jnp.array(
-            [self._conferences_dict[hc] for hc in home_team_conf], "int8"
+            [self._conferences_dict[hc] for hc in home_team_conf], DTYPES["conferences"]
         )
         away_conf_ind = jnp.array(
-            [self._conferences_dict[ac] for ac in away_team_conf], "int8"
+            [self._conferences_dict[ac] for ac in away_team_conf], DTYPES["conferences"]
         )
 
         self.time_diff = training_data["time_diff"]
@@ -366,8 +329,6 @@ class NeutralDixonColesMatchPredictorWC:
         away_conf: Union[str, Iterable[str]],
         neutral_venue: Union[int, Iterable[int]],
     ) -> Tuple[jnp.array, jnp.array]:
-        print("------------ _calculate_expected_goals -------------")
-        t = time()
         (
             home_team,
             away_team,
@@ -377,9 +338,7 @@ class NeutralDixonColesMatchPredictorWC:
         ) = self._parse_fixture_args(
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
-        print("index lookup", time() - t, home_team.shape)
 
-        t = time()
         attack_home, defence_home = (
             self.attack[:, home_team],
             self.defence[:, home_team],
@@ -407,8 +366,6 @@ class NeutralDixonColesMatchPredictorWC:
             + (1 - neutral_venue) * self.away_attack[:, away_team]
             - (1 - neutral_venue) * self.home_defence[:, home_team]
         )
-        print("rest of exp goals", time() - t, home_rate.shape)
-
         return home_rate, away_rate
 
     def predict_score_proba(
@@ -515,18 +472,22 @@ class NeutralDixonColesMatchPredictorWC:
         home_team, away_team, home_conf, away_conf = _str_to_list(
             home_team, away_team, home_conf, away_conf
         )
-        neutral_venue = jnp.array(neutral_venue, "int8")
+        neutral_venue = jnp.array(neutral_venue, DTYPES["venue"])
         if isinstance(home_team[0], str):
-            home_team = jnp.array([self._teams_dict[t] for t in home_team], "int16")
+            home_team = jnp.array(
+                [self._teams_dict[t] for t in home_team], DTYPES["teams"]
+            )
         if isinstance(away_team[0], str):
-            away_team = jnp.array([self._teams_dict[t] for t in away_team], "int16")
+            away_team = jnp.array(
+                [self._teams_dict[t] for t in away_team], DTYPES["teams"]
+            )
         if isinstance(home_conf[0], str):
             home_conf = jnp.array(
-                [self._conferences_dict[hc] for hc in home_conf], "int8"
+                [self._conferences_dict[hc] for hc in home_conf], DTYPES["conferences"]
             )
         if isinstance(away_conf[0], str):
             away_conf = jnp.array(
-                [self._conferences_dict[ac] for ac in away_conf], "int8"
+                [self._conferences_dict[ac] for ac in away_conf], DTYPES["conferences"]
             )
         return home_team, away_team, home_conf, away_conf, neutral_venue
 
@@ -534,8 +495,6 @@ class NeutralDixonColesMatchPredictorWC:
         self, home_team, away_team, home_conf, away_conf, neutral_venue
     ):
         """Compute probabilities of all plausible scorelines"""
-        print("***** predict_score_grid_proba *****")
-        t = time()
         (
             home_team,
             away_team,
@@ -559,9 +518,7 @@ class NeutralDixonColesMatchPredictorWC:
         home_conf_rep = np.repeat(home_conf, (self.max_goals + 1) ** 2)
         away_conf_rep = np.repeat(away_conf, (self.max_goals + 1) ** 2)
         neutral_venue_rep = np.repeat(neutral_venue, (self.max_goals + 1) ** 2)
-        print("rep", time() - t, home_team_rep.shape)
 
-        t = time()
         probs = self.predict_score_proba(
             home_team_rep,
             away_team_rep,
@@ -571,7 +528,6 @@ class NeutralDixonColesMatchPredictorWC:
             away_goals_flat,
             neutral_venue_rep,
         ).reshape(len(home_team), self.max_goals + 1, self.max_goals + 1)
-        print("rest of predict_score_grid_proba", time() - t, probs.shape)
         return probs, home_goals, away_goals
 
     def predict_outcome_proba(
@@ -597,7 +553,6 @@ class NeutralDixonColesMatchPredictorWC:
             Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
                 "away_win" and "draw". Values are probabilities of each outcome.
         """
-        t = time()
         (
             home_team,
             away_team,
@@ -611,7 +566,6 @@ class NeutralDixonColesMatchPredictorWC:
         probs, home_goals, away_goals = self.predict_score_grid_proba(
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
-        print("predict_outcome_proba (score grid)", time() - t, probs.shape)
         # obtain outcome probabilities by summing the appropriate elements of the grid
         return {
             "home_win": probs[:, home_goals > away_goals].sum(axis=-1),
@@ -619,7 +573,7 @@ class NeutralDixonColesMatchPredictorWC:
             "draw": probs[:, home_goals == away_goals].sum(axis=-1),
         }
 
-    def simulate_score(
+    def sample_score(
         self,
         home_team: Union[str, Iterable[str]],
         away_team: Union[str, Iterable[str]],
@@ -638,33 +592,29 @@ class NeutralDixonColesMatchPredictorWC:
         ) = self._parse_fixture_args(
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
-        t = time()
         if random_state is None:
             random_state = int(datetime.now().timestamp() * 100)
 
         probs, home_goals, away_goals = self.predict_score_grid_proba(
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
-        print("simulate_score (score_grid)", time() - t, probs.shape)
-        t = time()
 
-        home_goals = jnp.array(home_goals.flatten(), "int8")
-        away_goals = jnp.array(away_goals.flatten(), "int8")
+        home_goals = jnp.array(home_goals.flatten(), DTYPES["goals"])
+        away_goals = jnp.array(away_goals.flatten(), DTYPES["goals"])
+
         rng_key = jax.random.PRNGKey(random_state)
-        sim_scores = jnp.empty((2, len(home_team), num_samples), "int8")
-        loop_fn = _get_sim_score_fun(
-            probs, home_goals, away_goals, self.max_goals, num_samples
+        sample_idx = map_choice(
+            rng_key,
+            jnp.arange(len(home_goals), dtype="uint32"),
+            num_samples,
+            probs.reshape((len(home_team), -1)),
         )
-        sim_scores, rng_key = jax.lax.fori_loop(
-            0,
-            len(home_team),
-            loop_fn,
-            (sim_scores, rng_key),
-        )
-        print("simulated_score (rest)", time() - t, sim_scores.shape)
-        return {"home_score": sim_scores[0], "away_score": sim_scores[1]}
+        sample_scores_home = home_goals[sample_idx]
+        sample_scores_away = away_goals[sample_idx]
 
-    def simulate_outcome(
+        return {"home_score": sample_scores_home, "away_score": sample_scores_away}
+
+    def sample_outcome(
         self,
         home_team: Union[str, Iterable[str]],
         away_team: Union[str, Iterable[str]],
@@ -685,7 +635,6 @@ class NeutralDixonColesMatchPredictorWC:
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
 
-        t = time()
         if random_state is None:
             random_state = int(datetime.now().timestamp() * 100)
 
@@ -693,39 +642,32 @@ class NeutralDixonColesMatchPredictorWC:
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
         probs = jnp.array([probs["home_win"], probs["draw"], probs["away_win"]]).T
-        print("simulate_outcome (part 1: proba)", time() - t, probs.shape)
-        t = time()
         if knockout:
-            # don't consider draws
+            # don't consider draws (renormalise with home win and away win only)
             probs = probs[:, [0, 2]] / (probs[:, 0] + probs[:, 2])[:, None]
 
-        sim_outcome = jnp.empty((len(home_team), num_samples), "int8")
         rng_key = jax.random.PRNGKey(random_state)
-        loop_fn = _get_sim_outcome_fun(probs, num_samples)
-        sim_outcome, rng_key = jax.lax.fori_loop(
-            0,
-            len(home_team),
-            loop_fn,
-            (sim_outcome, rng_key),
+        sample_idx = map_choice(
+            rng_key,
+            jnp.arange(probs.shape[1], dtype="uint32"),
+            num_samples,
+            probs,
         )
 
-        winner = np.empty((len(home_team), num_samples), dtype="int16")
+        winner = np.empty((len(home_team), num_samples), dtype=DTYPES["teams"])
         home_team_rep = home_team.repeat(num_samples).reshape(
             (len(home_team), num_samples)
         )
         away_team_rep = away_team.repeat(num_samples).reshape(
             (len(home_team), num_samples)
         )
-        winner[sim_outcome == 0] = home_team_rep[sim_outcome == 0]
+        winner[sample_idx == 0] = home_team_rep[sample_idx == 0]
         if knockout:
-            winner[sim_outcome == 1] = away_team_rep[sim_outcome == 1]
+            winner[sample_idx == 1] = away_team_rep[sample_idx == 1]
         else:
-            winner[sim_outcome == 2] = away_team_rep[sim_outcome == 2]
-            winner[sim_outcome == 1] = len(self.teams)  # Temporary index for 'Draw'
+            winner[sample_idx == 2] = away_team_rep[sample_idx == 2]
+            winner[sample_idx == 1] = len(self.teams)  # Temporary index for 'Draw'
 
-        longest_name = max(len(t) for t in self.teams)
-
-        print("simulate_outcome (rest)", time() - t)
         _teams_with_draw = np.append(self.teams, "Draw")
         return _teams_with_draw[winner]
 
