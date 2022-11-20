@@ -399,10 +399,10 @@ class NeutralDixonColesMatchPredictorWC:
             self.corr_coef,
         )
 
-        home_probs = jnp.exp(dist.Poisson(expected_home_goals).log_prob(home_goals))
-        away_probs = jnp.exp(dist.Poisson(expected_away_goals).log_prob(away_goals))
+        home_probs = dist.Poisson(expected_home_goals).log_prob(home_goals)
+        away_probs = dist.Poisson(expected_away_goals).log_prob(away_goals)
 
-        sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
+        sampled_probs = jnp.exp(corr_term + home_probs + away_probs)
         return sampled_probs.mean(axis=0)
 
     def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
@@ -569,8 +569,8 @@ class NeutralDixonColesMatchPredictorWC:
         # obtain outcome probabilities by summing the appropriate elements of the grid
         return {
             "home_win": probs[:, home_goals > away_goals].sum(axis=-1),
-            "away_win": probs[:, home_goals < away_goals].sum(axis=-1),
             "draw": probs[:, home_goals == away_goals].sum(axis=-1),
+            "away_win": probs[:, home_goals < away_goals].sum(axis=-1),
         }
 
     def sample_score(
