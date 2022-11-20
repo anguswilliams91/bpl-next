@@ -7,7 +7,7 @@ from typing import Dict, Iterable, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 
-MAX_GOALS = 10
+MAX_GOALS = 15
 DTYPES = {
     "goals": "uint8",
     "teams": "uint16",
