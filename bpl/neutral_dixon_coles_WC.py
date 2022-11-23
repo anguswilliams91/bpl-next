@@ -537,6 +537,7 @@ class NeutralDixonColesMatchPredictorWC:
         home_conf: Union[str, Iterable[str]],
         away_conf: Union[str, Iterable[str]],
         neutral_venue: Union[int, Iterable[int]],
+        knockout: bool = False,
     ) -> Dict[str, jnp.array]:
         """Calculate home win, away win and draw probabilities.
 
@@ -548,6 +549,7 @@ class NeutralDixonColesMatchPredictorWC:
             away_team (Union[str, Iterable[str]]): name of the away team(s).
             neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
             else 0
+            knockout : If True only consider the probability of wins (exclude draws)
 
         Returns:
             Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
@@ -567,10 +569,19 @@ class NeutralDixonColesMatchPredictorWC:
             home_team, away_team, home_conf, away_conf, neutral_venue
         )
         # obtain outcome probabilities by summing the appropriate elements of the grid
+        home_win = probs[:, home_goals > away_goals].sum(axis=-1)
+        draw = probs[:, home_goals == away_goals].sum(axis=-1)
+        away_win = probs[:, home_goals < away_goals].sum(axis=-1)
+
+        if knockout:
+            # don't consider draws (renormalise with home win and away win only)
+            norm = home_win + away_win
+            return {"home_win": home_win / norm, "away_win": away_win / norm}
+
         return {
-            "home_win": probs[:, home_goals > away_goals].sum(axis=-1),
-            "draw": probs[:, home_goals == away_goals].sum(axis=-1),
-            "away_win": probs[:, home_goals < away_goals].sum(axis=-1),
+            "home_win": home_win,
+            "draw": draw,
+            "away_win": away_win,
         }
 
     def sample_score(
@@ -639,12 +650,12 @@ class NeutralDixonColesMatchPredictorWC:
             random_state = int(datetime.now().timestamp() * 100)
 
         probs = self.predict_outcome_proba(
-            home_team, away_team, home_conf, away_conf, neutral_venue
+            home_team, away_team, home_conf, away_conf, neutral_venue, knockout
         )
-        probs = jnp.array([probs["home_win"], probs["draw"], probs["away_win"]]).T
         if knockout:
-            # don't consider draws (renormalise with home win and away win only)
-            probs = probs[:, [0, 2]] / (probs[:, 0] + probs[:, 2])[:, None]
+            probs = jnp.array([probs["home_win"], probs["away_win"]]).T
+        else:
+            probs = jnp.array([probs["home_win"], probs["draw"], probs["away_win"]]).T
 
         rng_key = jax.random.PRNGKey(random_state)
         sample_idx = map_choice(
