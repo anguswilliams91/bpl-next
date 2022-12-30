@@ -1,7 +1,9 @@
-"""Implementation of the neutral model in the current version of bpl."""
+"""Implementation of the neutral model in the current version of bpl for predicting the World Cup."""
 from __future__ import annotations
 
 import warnings
+from datetime import datetime
+from time import time
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import jax
@@ -13,8 +15,8 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term
-from bpl.base import MAX_GOALS
+from bpl._util import str_to_list, compute_corr_coef_bounds, dixon_coles_correlation_term, map_choice
+from bpl.base import DTYPES, MAX_GOALS
 
 __all__ = ["NeutralDixonColesMatchPredictor"]
 
@@ -25,11 +27,18 @@ class NeutralDixonColesMatchPredictor:
     A Dixon-Coles like model for predicting match outcomes, modified to:
     - Work for matches in neutral venues (e.g. international tournaments)
     - Add separate home & away, defence & attack, advantages/disadvantages for each team
+    - Add possibility to downweight games exponentially according to time
+    - Add possibility to weight games according to match importance
+    
+    Note that this is a special case of NeutralDixonColesMatchPredictorWC model where
+    confederation (or league) strength is not modelled (all teams are assumed to be in
+    the same confederation or league)
     """
 
     # pylint: disable=duplicate-code
-    def __init__(self):
+    def __init__(self, max_goals=MAX_GOALS):
         self.teams = None
+        self._teams_dict = None
         self.attack = None
         self.defence = None
         self.home_attack = None
@@ -57,6 +66,7 @@ class NeutralDixonColesMatchPredictor:
         self.standardised_defence = None
         self._team_covariates_mean = None
         self._team_covariates_std = None
+        self.max_goals = max_goals
 
     # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
@@ -67,8 +77,15 @@ class NeutralDixonColesMatchPredictor:
         home_goals: Iterable[int],
         away_goals: Iterable[int],
         neutral_venue: Iterable[int],
-        team_covariates: Optional[np.array],
+        time_diff: Iterable[float],
+        epsilon: float,
+        game_weights: Iterable[float],
+        team_covariates: Optional[np.array] = None,
     ):
+        mean_attack = 0.0
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
+        std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=0.5))
+        std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=0.5))
         mean_home_attack = numpyro.sample("mean_home_attack", dist.Normal(0.1, 0.2))
         mean_away_attack = numpyro.sample("mean_away_attack", dist.Normal(-0.1, 0.2))
         mean_home_defence = numpyro.sample("mean_home_defence", dist.Normal(0.1, 0.2))
@@ -81,10 +98,6 @@ class NeutralDixonColesMatchPredictor:
         std_away_defence = numpyro.sample(
             "std_away_defence", dist.HalfNormal(scale=1.0)
         )
-        mean_attack = 0.0
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
-        std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
-        std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
 
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
@@ -123,7 +136,6 @@ class NeutralDixonColesMatchPredictor:
                     loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho**2.0)
                 ),
             )
-
             with reparam(config={"home_attack": LocScaleReparam(centered=0)}):
                 home_attack = numpyro.sample(
                     "home_attack",
@@ -164,12 +176,16 @@ class NeutralDixonColesMatchPredictor:
             - (1 - neutral_venue) * home_defence[home_team]
         )
 
-        numpyro.sample(
-            "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
-        )
-        numpyro.sample(
-            "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
-        )
+        weights = jnp.exp(-epsilon * time_diff) * game_weights
+        with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(
+            scale=weights
+        ):
+            numpyro.sample(
+                "home_goals", dist.Poisson(expected_home_goals), obs=home_goals
+            )
+            numpyro.sample(
+                "away_goals", dist.Poisson(expected_away_goals), obs=away_goals
+            )
 
         # impose bounds on the correlation coefficient
         corr_coef_raw = numpyro.sample(
@@ -178,7 +194,12 @@ class NeutralDixonColesMatchPredictor:
         LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
         corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
-            home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
+            home_goals,
+            away_goals,
+            expected_home_goals,
+            expected_away_goals,
+            corr_coef,
+            weights,
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
@@ -186,20 +207,24 @@ class NeutralDixonColesMatchPredictor:
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
+        epsilon: float = 0.0,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> NeutralDixonColesMatchPredictor:
-
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
         team_covariates = training_data.get("team_covariates")
 
-        self.teams = sorted(list(set(home_team) | set(away_team)))
-        home_ind = jnp.array([self.teams.index(t) for t in home_team])
-        away_ind = jnp.array([self.teams.index(t) for t in away_team])
+        self.teams = np.array(sorted(set(home_team) | set(away_team)))
+        self._teams_dict = {t: i for i, t in enumerate(self.teams)}
+        home_ind = jnp.array([self._teams_dict[t] for t in home_team], DTYPES["teams"])
+        away_ind = jnp.array([self._teams_dict[t] for t in away_team], DTYPES["teams"])
+
+        self.time_diff = training_data["time_diff"]
+        self.game_weights = training_data["game_weights"]
 
         if team_covariates:
             if set(team_covariates.keys()) != set(self.teams):
@@ -226,6 +251,9 @@ class NeutralDixonColesMatchPredictor:
             np.array(training_data["home_goals"]),
             np.array(training_data["away_goals"]),
             np.array(training_data["neutral_venue"]),
+            self.time_diff,
+            epsilon,
+            self.game_weights,
             team_covariates=team_covariates,
             **(run_kwargs or {}),
         )
@@ -256,8 +284,24 @@ class NeutralDixonColesMatchPredictor:
         self.std_away_defence = samples["std_away_defence"]
         self.standardised_attack = samples["standardised_attack"]
         self.standardised_defence = samples["standardised_defence"]
+        self.epsilon = epsilon
 
         return self
+
+    def _parse_fixture_args(
+        self, home_team, away_team, neutral_venue
+    ):
+        home_team, away_team = str_to_list(home_team, away_team)
+        neutral_venue = jnp.array(neutral_venue, DTYPES["venue"])
+        if isinstance(home_team[0], str):
+            home_team = jnp.array(
+                [self._teams_dict[t] for t in home_team], DTYPES["teams"]
+            )
+        if isinstance(away_team[0], str):
+            away_team = jnp.array(
+                [self._teams_dict[t] for t in away_team], DTYPES["teams"]
+            )
+        return home_team, away_team, neutral_venue
 
     def _calculate_expected_goals(
         self,
@@ -265,27 +309,47 @@ class NeutralDixonColesMatchPredictor:
         away_team: Union[str, Iterable[str]],
         neutral_venue: Union[int, Iterable[int]],
     ) -> Tuple[jnp.array, jnp.array]:
+        """Computes the rate (mean) for the Poisson distribution to model
+        the goals scored by home_team and away_team.
 
-        home_ind = jnp.array([self.teams.index(t) for t in home_team])
-        away_ind = jnp.array([self.teams.index(t) for t in away_team])
-        neutral_venue = jnp.array(neutral_venue)
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+                else 0.
 
-        attack_home, defence_home = self.attack[:, home_ind], self.defence[:, home_ind]
-        attack_away, defence_away = self.attack[:, away_ind], self.defence[:, away_ind]
+        Returns:
+            Tuple[jnp.array, jnp.array]: Tuple of arrays for home and away rates.
+        """
+        (
+            home_team,
+            away_team,
+            neutral_venue,
+        ) = self._parse_fixture_args(
+            home_team, away_team, neutral_venue
+        )
+
+        attack_home, defence_home = (
+            self.attack[:, home_team],
+            self.defence[:, home_team],
+        )
+        attack_away, defence_away = (
+            self.attack[:, away_team],
+            self.defence[:, away_team],
+        )
 
         home_rate = jnp.exp(
             attack_home
             - defence_away
-            + (1 - neutral_venue) * self.home_attack[:, home_ind]
-            - (1 - neutral_venue) * self.away_defence[:, away_ind]
+            + (1 - neutral_venue) * self.home_attack[:, home_team]
+            - (1 - neutral_venue) * self.away_defence[:, away_team]
         )
         away_rate = jnp.exp(
             attack_away
             - defence_home
-            + (1 - neutral_venue) * self.away_attack[:, away_ind]
-            - (1 - neutral_venue) * self.home_defence[:, home_ind]
+            + (1 - neutral_venue) * self.away_attack[:, away_team]
+            - (1 - neutral_venue) * self.home_defence[:, home_team]
         )
-
         return home_rate, away_rate
 
     def predict_score_proba(
@@ -296,9 +360,26 @@ class NeutralDixonColesMatchPredictor:
         away_goals: Union[int, Iterable[int]],
         neutral_venue: Union[int, Iterable[int]],
     ) -> jnp.array:
+        """Compute probability of a particular scoreline between two teams.
 
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            home_goals (Union[int, Iterable[int]]): number of goals scored by the home team(s).
+            away_goals (Union[int, Iterable[int]]): number of goals scored by the away team(s).
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+                else 0.
+
+        Returns:
+            jnp.array: Array of probabilities of each scoreline.
+        """
+        (
+            home_team,
+            away_team,
+            neutral_venue,
+        ) = self._parse_fixture_args(
+            home_team, away_team, neutral_venue
+        )
 
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(
             home_team, away_team, neutral_venue
@@ -311,13 +392,23 @@ class NeutralDixonColesMatchPredictor:
             self.corr_coef,
         )
 
-        home_probs = jnp.exp(dist.Poisson(expected_home_goals).log_prob(home_goals))
-        away_probs = jnp.exp(dist.Poisson(expected_away_goals).log_prob(away_goals))
+        home_probs = dist.Poisson(expected_home_goals).log_prob(home_goals)
+        away_probs = dist.Poisson(expected_away_goals).log_prob(away_goals)
 
-        sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
+        sampled_probs = jnp.exp(corr_term + home_probs + away_probs)
         return sampled_probs.mean(axis=0)
 
     def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
+        """Method for adding another team to the model.
+
+        Args:
+            team_name (str): team name
+            team_covariates (Optional[np.array], optional): team covariates to
+                initialise prior distribution. Defaults to None.
+
+        Raises:
+            ValueError: if `team_name` is already known to the model.
+        """
         if team_name in self.teams:
             raise ValueError(f"Team {team_name} already known to model.")
 
@@ -378,11 +469,59 @@ class NeutralDixonColesMatchPredictor:
             (self.away_defence, away_defence[:, None]), axis=1
         )
 
+    def predict_score_grid_proba(
+        self, 
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        neutral_venue: Union[int, Iterable[int]],
+    ) -> Tuple[jnp.array, np.array, np.array]:
+        """Calculate scoreline probabilities between two teams.
+
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+                else 0.
+
+        Returns:
+            Tuple[jnp.array, np.array, np.array]: Tuple of the following grids (as arrays):
+                probability of scorelines, home goals and away goals scored grids
+        """
+        (
+            home_team,
+            away_team,
+            neutral_venue,
+        ) = self._parse_fixture_args(
+            home_team, away_team, neutral_venue
+        )
+
+        n_goals = np.arange(0, self.max_goals + 1)
+        home_goals, away_goals = np.meshgrid(n_goals, n_goals, indexing="ij")
+        home_goals_flat = jnp.tile(
+            home_goals.reshape((self.max_goals + 1) ** 2), len(home_team)
+        )
+        away_goals_flat = jnp.tile(
+            away_goals.reshape((self.max_goals + 1) ** 2), len(home_team)
+        )
+        home_team_rep = np.repeat(home_team, (self.max_goals + 1) ** 2)
+        away_team_rep = np.repeat(away_team, (self.max_goals + 1) ** 2)
+        neutral_venue_rep = np.repeat(neutral_venue, (self.max_goals + 1) ** 2)
+
+        probs = self.predict_score_proba(
+            home_team_rep,
+            away_team_rep,
+            home_goals_flat,
+            away_goals_flat,
+            neutral_venue_rep,
+        ).reshape(len(home_team), self.max_goals + 1, self.max_goals + 1)
+        return probs, home_goals, away_goals
+
     def predict_outcome_proba(
         self,
         home_team: Union[str, Iterable[str]],
         away_team: Union[str, Iterable[str]],
         neutral_venue: Union[int, Iterable[int]],
+        knockout: bool = False,
     ) -> Dict[str, jnp.array]:
         """Calculate home win, away win and draw probabilities.
 
@@ -393,35 +532,158 @@ class NeutralDixonColesMatchPredictor:
             home_team (Union[str, Iterable[str]]): name of the home team(s).
             away_team (Union[str, Iterable[str]]): name of the away team(s).
             neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
-            else 0
+                else 0.
+            knockout : If True only consider the probability of wins (exclude draws).
 
         Returns:
             Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
-                "away_win" and "draw". Values are probabilities of each outcome.
+                "draw" and "away_win". Values are probabilities of each outcome.
         """
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
-
-        # make a grid of scorelines up to plausible limits
-        n_goals = np.arange(0, MAX_GOALS + 1)
-        x, y = np.meshgrid(n_goals, n_goals, indexing="ij")
-        x_flat = jnp.tile(x.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        y_flat = jnp.tile(y.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        home_team_rep = np.repeat(home_team, (MAX_GOALS + 1) ** 2)
-        away_team_rep = np.repeat(away_team, (MAX_GOALS + 1) ** 2)
-        neutral_venue_rep = np.repeat(neutral_venue, (MAX_GOALS + 1) ** 2)
-
-        # evaluate the probability of scorelines at each gridpoint
-        probs = self.predict_score_proba(
-            home_team_rep, away_team_rep, x_flat, y_flat, neutral_venue_rep
-        ).reshape(len(home_team), MAX_GOALS + 1, MAX_GOALS + 1)
-
+        (
+            home_team,
+            away_team,
+            neutral_venue,
+        ) = self._parse_fixture_args(
+            home_team, away_team, neutral_venue
+        )
+        # compute probabilities for all scorelines
+        probs, home_goals, away_goals = self.predict_score_grid_proba(
+            home_team, away_team, neutral_venue
+        )
         # obtain outcome probabilities by summing the appropriate elements of the grid
-        prob_home_win = probs[:, x > y].sum(axis=-1)
-        prob_away_win = probs[:, x < y].sum(axis=-1)
-        prob_draw = probs[:, x == y].sum(axis=-1)
+        home_win = probs[:, home_goals > away_goals].sum(axis=-1)
+        draw = probs[:, home_goals == away_goals].sum(axis=-1)
+        away_win = probs[:, home_goals < away_goals].sum(axis=-1)
 
-        return {"home_win": prob_home_win, "away_win": prob_away_win, "draw": prob_draw}
+        if knockout:
+            # don't consider draws (renormalise with home win and away win only)
+            norm = home_win + away_win
+            return {"home_win": home_win / norm, "away_win": away_win / norm}
+
+        return {
+            "home_win": home_win,
+            "draw": draw,
+            "away_win": away_win,
+        }
+
+    def sample_score(
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        neutral_venue: Union[int, Iterable[int]],
+        num_samples: int = 1,
+        random_state: int = None,
+    ) -> Dict[str, jnp.array]:
+        """Sample scoreline between two teams.
+
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+                else 0.
+            num_samples (int, optional): number of simulations. Defaults to 1.
+            random_state (int, optional): seed. Defaults to None.
+
+        Returns:
+            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_score" and
+                "away_score". Values are the simulated goals scored in each simulation.
+        """
+        (
+            home_team,
+            away_team,
+            neutral_venue,
+        ) = self._parse_fixture_args(
+            home_team, away_team, neutral_venue
+        )
+        if random_state is None:
+            random_state = int(datetime.now().timestamp() * 100)
+
+        probs, home_goals, away_goals = self.predict_score_grid_proba(
+            home_team, away_team, neutral_venue
+        )
+
+        home_goals = jnp.array(home_goals.flatten(), DTYPES["goals"])
+        away_goals = jnp.array(away_goals.flatten(), DTYPES["goals"])
+
+        rng_key = jax.random.PRNGKey(random_state)
+        sample_idx = map_choice(
+            rng_key,
+            jnp.arange(len(home_goals), dtype="uint32"),
+            num_samples,
+            probs.reshape((len(home_team), -1)),
+        )
+        sample_scores_home = home_goals[sample_idx]
+        sample_scores_away = away_goals[sample_idx]
+
+        return {"home_score": sample_scores_home, "away_score": sample_scores_away}
+
+    def sample_outcome(
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        neutral_venue: Union[int, Iterable[int]],
+        knockout: bool = False,
+        num_samples: int = 1,
+        random_state: int = None,
+    ) -> np.array:
+        """Sample outcome of match between two teams.
+
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
+                else 0.
+            knockout : If True only consider the probability of wins (exclude draws).
+            num_samples (int, optional): number of simulations. Defaults to 1.
+            random_state (int, optional): seed. Defaults to None.
+
+        Returns:
+            np.array: Array of strings representing the winning team or 'Draw'
+                ('Draw' only considered if knockout is False).
+        """
+        (
+            home_team,
+            away_team,
+            neutral_venue,
+        ) = self._parse_fixture_args(
+            home_team, away_team, neutral_venue
+        )
+
+        if random_state is None:
+            random_state = int(datetime.now().timestamp() * 100)
+
+        probs = self.predict_outcome_proba(
+            home_team, away_team, neutral_venue, knockout
+        )
+        if knockout:
+            probs = jnp.array([probs["home_win"], probs["away_win"]]).T
+        else:
+            probs = jnp.array([probs["home_win"], probs["draw"], probs["away_win"]]).T
+
+        rng_key = jax.random.PRNGKey(random_state)
+        sample_idx = map_choice(
+            rng_key,
+            jnp.arange(probs.shape[1], dtype="uint32"),
+            num_samples,
+            probs,
+        )
+
+        winner = np.empty((len(home_team), num_samples), dtype=DTYPES["teams"])
+        home_team_rep = home_team.repeat(num_samples).reshape(
+            (len(home_team), num_samples)
+        )
+        away_team_rep = away_team.repeat(num_samples).reshape(
+            (len(home_team), num_samples)
+        )
+        winner[sample_idx == 0] = home_team_rep[sample_idx == 0]
+        if knockout:
+            winner[sample_idx == 1] = away_team_rep[sample_idx == 1]
+        else:
+            winner[sample_idx == 2] = away_team_rep[sample_idx == 2]
+            winner[sample_idx == 1] = len(self.teams)  # Temporary index for 'Draw'
+
+        _teams_with_draw = np.append(self.teams, "Draw")
+        return _teams_with_draw[winner]
 
     def predict_score_n_proba(
         self,
@@ -442,29 +704,39 @@ class NeutralDixonColesMatchPredictor:
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
             neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
-            else 0
+                else 0.
 
         Returns:
             jnp.array: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-
+        (team, opponent, _,) = self._parse_fixture_args(
+            team, opponent, neutral_venue
+        )
         # flat lists of all possible scorelines with team scoring n goals
-        team_rep = np.repeat(team, (MAX_GOALS + 1) * len(n))
-        opponent_rep = np.repeat(opponent, (MAX_GOALS + 1) * len(n))
-        n_rep = np.resize(n, (MAX_GOALS + 1) * len(n))
-        x_rep = np.repeat(np.arange(MAX_GOALS + 1), len(n))
-        neutral_venue_rep = np.repeat(neutral_venue, (MAX_GOALS + 1) * len(n))
+        team_rep = np.repeat(team, (self.max_goals + 1) * len(n))
+        opponent_rep = np.repeat(opponent, (self.max_goals + 1) * len(n))
+        n_rep = np.resize(n, (self.max_goals + 1) * len(n))
+        x_rep = np.repeat(np.arange(self.max_goals + 1), len(n))
+        neutral_venue_rep = np.repeat(neutral_venue, (self.max_goals + 1) * len(n))
 
         probs = (
             self.predict_score_proba(
-                team_rep, opponent_rep, n_rep, x_rep, neutral_venue_rep
+                team_rep,
+                opponent_rep,
+                n_rep,
+                x_rep,
+                neutral_venue_rep,
             )
             if home
             else self.predict_score_proba(
-                opponent_rep, team_rep, x_rep, n_rep, neutral_venue_rep
+                opponent_rep,
+                team_rep,
+                x_rep,
+                n_rep,
+                neutral_venue_rep,
             )
-        ).reshape(MAX_GOALS + 1, len(n))
+        ).reshape(self.max_goals + 1, len(n))
 
         # sum probability of all scorelines where team scored n goals
         return probs.sum(axis=0)
@@ -488,29 +760,39 @@ class NeutralDixonColesMatchPredictor:
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
             neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
-            else 0
+                else 0.
 
         Returns:
             jnp.array: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-
+        (team, opponent, _,) = self._parse_fixture_args(
+            team, opponent, neutral_venue
+        )
         # flat lists of all possible scorelines with team conceding n goals
-        team_rep = np.repeat(team, (MAX_GOALS + 1) * len(n))
-        opponent_rep = np.repeat(opponent, (MAX_GOALS + 1) * len(n))
-        n_rep = np.resize(n, (MAX_GOALS + 1) * len(n))
-        x_rep = np.repeat(np.arange(MAX_GOALS + 1), len(n))
-        neutral_venue_rep = np.repeat(neutral_venue, (MAX_GOALS + 1) * len(n))
+        team_rep = np.repeat(team, (self.max_goals + 1) * len(n))
+        opponent_rep = np.repeat(opponent, (self.max_goals + 1) * len(n))
+        n_rep = np.resize(n, (self.max_goals + 1) * len(n))
+        x_rep = np.repeat(np.arange(self.max_goals + 1), len(n))
+        neutral_venue_rep = np.repeat(neutral_venue, (self.max_goals + 1) * len(n))
 
         probs = (
             self.predict_score_proba(
-                team_rep, opponent_rep, x_rep, n_rep, neutral_venue_rep
+                team_rep,
+                opponent_rep,
+                x_rep,
+                n_rep,
+                neutral_venue_rep,
             )
             if home
             else self.predict_score_proba(
-                opponent_rep, team_rep, n_rep, x_rep, neutral_venue_rep
+                opponent_rep,
+                team_rep,
+                n_rep,
+                x_rep,
+                neutral_venue_rep,
             )
-        ).reshape(MAX_GOALS + 1, len(n))
+        ).reshape(self.max_goals + 1, len(n))
 
         # sum probability all scorelines where team conceded n goals
         return probs.sum(axis=0)

@@ -6,6 +6,10 @@ import jax.numpy as jnp
 import numpy as np
 
 
+def str_to_list(*args):
+    return ([x] if isinstance(x, str) else x for x in args)
+
+
 def compute_corr_coef_bounds(
     expected_home_goals: jnp.array, expected_away_goals: jnp.array
 ) -> Tuple[float, float]:
