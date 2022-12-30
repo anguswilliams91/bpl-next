@@ -27,6 +27,7 @@ def compute_corr_coef_bounds(
     return LB, UB
 
 
+# pylint: disable=too-many-arguments
 def dixon_coles_correlation_term(
     home_goals: Union[int, Iterable[int]],
     away_goals: Union[int, Iterable[int]],

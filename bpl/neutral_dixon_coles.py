@@ -1,9 +1,8 @@
-"""Implementation of the neutral model in the current version of bpl for predicting the World Cup."""
+"""Implementation of the neutral model for predicting the World Cup."""
 from __future__ import annotations
 
 import warnings
 from datetime import datetime
-from time import time
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import jax
@@ -15,7 +14,12 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import str_to_list, compute_corr_coef_bounds, dixon_coles_correlation_term, map_choice
+from bpl._util import (
+    str_to_list,
+    compute_corr_coef_bounds,
+    dixon_coles_correlation_term,
+    map_choice,
+)
 from bpl.base import DTYPES, MAX_GOALS
 
 __all__ = ["NeutralDixonColesMatchPredictor"]
@@ -29,7 +33,7 @@ class NeutralDixonColesMatchPredictor:
     - Add separate home & away, defence & attack, advantages/disadvantages for each team
     - Add possibility to downweight games exponentially according to time
     - Add possibility to weight games according to match importance
-    
+
     Note that this is a special case of NeutralDixonColesMatchPredictorWC model where
     confederation (or league) strength is not modelled (all teams are assumed to be in
     the same confederation or league)
@@ -45,6 +49,9 @@ class NeutralDixonColesMatchPredictor:
         self.away_attack = None
         self.home_defence = None
         self.away_defence = None
+        self.time_diff = None
+        self.epsilon = None
+        self.game_weights = None
         self.corr_coef = None
         self.u = None
         self.rho = None
@@ -68,7 +75,7 @@ class NeutralDixonColesMatchPredictor:
         self._team_covariates_std = None
         self.max_goals = max_goals
 
-    # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
+    # pylint: disable=too-many-arguments,too-many-statements,too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -203,7 +210,7 @@ class NeutralDixonColesMatchPredictor:
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
+    # pylint: disable=arguments-differ,too-many-arguments,too-many-statements,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -223,6 +230,7 @@ class NeutralDixonColesMatchPredictor:
         home_ind = jnp.array([self._teams_dict[t] for t in home_team], DTYPES["teams"])
         away_ind = jnp.array([self._teams_dict[t] for t in away_team], DTYPES["teams"])
 
+        self.epsilon = epsilon
         self.time_diff = training_data["time_diff"]
         self.game_weights = training_data["game_weights"]
 
@@ -284,13 +292,10 @@ class NeutralDixonColesMatchPredictor:
         self.std_away_defence = samples["std_away_defence"]
         self.standardised_attack = samples["standardised_attack"]
         self.standardised_defence = samples["standardised_defence"]
-        self.epsilon = epsilon
 
         return self
 
-    def _parse_fixture_args(
-        self, home_team, away_team, neutral_venue
-    ):
+    def _parse_fixture_args(self, home_team, away_team, neutral_venue):
         home_team, away_team = str_to_list(home_team, away_team)
         neutral_venue = jnp.array(neutral_venue, DTYPES["venue"])
         if isinstance(home_team[0], str):
@@ -325,9 +330,7 @@ class NeutralDixonColesMatchPredictor:
             home_team,
             away_team,
             neutral_venue,
-        ) = self._parse_fixture_args(
-            home_team, away_team, neutral_venue
-        )
+        ) = self._parse_fixture_args(home_team, away_team, neutral_venue)
 
         attack_home, defence_home = (
             self.attack[:, home_team],
@@ -377,9 +380,7 @@ class NeutralDixonColesMatchPredictor:
             home_team,
             away_team,
             neutral_venue,
-        ) = self._parse_fixture_args(
-            home_team, away_team, neutral_venue
-        )
+        ) = self._parse_fixture_args(home_team, away_team, neutral_venue)
 
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(
             home_team, away_team, neutral_venue
@@ -453,7 +454,7 @@ class NeutralDixonColesMatchPredictor:
         attack = mean_attack + log_a_tilde * self.std_attack
         defence = mean_defence + log_b_tilde * self.std_defence
 
-        self.teams.append(team_name)
+        self.teams = np.append(self.teams, team_name)
         self.attack = jnp.concatenate((self.attack, attack[:, None]), axis=1)
         self.defence = jnp.concatenate((self.defence, defence[:, None]), axis=1)
         self.home_attack = jnp.concatenate(
@@ -470,7 +471,7 @@ class NeutralDixonColesMatchPredictor:
         )
 
     def predict_score_grid_proba(
-        self, 
+        self,
         home_team: Union[str, Iterable[str]],
         away_team: Union[str, Iterable[str]],
         neutral_venue: Union[int, Iterable[int]],
@@ -491,9 +492,7 @@ class NeutralDixonColesMatchPredictor:
             home_team,
             away_team,
             neutral_venue,
-        ) = self._parse_fixture_args(
-            home_team, away_team, neutral_venue
-        )
+        ) = self._parse_fixture_args(home_team, away_team, neutral_venue)
 
         n_goals = np.arange(0, self.max_goals + 1)
         home_goals, away_goals = np.meshgrid(n_goals, n_goals, indexing="ij")
@@ -543,9 +542,7 @@ class NeutralDixonColesMatchPredictor:
             home_team,
             away_team,
             neutral_venue,
-        ) = self._parse_fixture_args(
-            home_team, away_team, neutral_venue
-        )
+        ) = self._parse_fixture_args(home_team, away_team, neutral_venue)
         # compute probabilities for all scorelines
         probs, home_goals, away_goals = self.predict_score_grid_proba(
             home_team, away_team, neutral_venue
@@ -592,9 +589,7 @@ class NeutralDixonColesMatchPredictor:
             home_team,
             away_team,
             neutral_venue,
-        ) = self._parse_fixture_args(
-            home_team, away_team, neutral_venue
-        )
+        ) = self._parse_fixture_args(home_team, away_team, neutral_venue)
         if random_state is None:
             random_state = int(datetime.now().timestamp() * 100)
 
@@ -645,9 +640,7 @@ class NeutralDixonColesMatchPredictor:
             home_team,
             away_team,
             neutral_venue,
-        ) = self._parse_fixture_args(
-            home_team, away_team, neutral_venue
-        )
+        ) = self._parse_fixture_args(home_team, away_team, neutral_venue)
 
         if random_state is None:
             random_state = int(datetime.now().timestamp() * 100)
@@ -710,9 +703,11 @@ class NeutralDixonColesMatchPredictor:
             jnp.array: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-        (team, opponent, _,) = self._parse_fixture_args(
-            team, opponent, neutral_venue
-        )
+        (
+            team,
+            opponent,
+            _,
+        ) = self._parse_fixture_args(team, opponent, neutral_venue)
         # flat lists of all possible scorelines with team scoring n goals
         team_rep = np.repeat(team, (self.max_goals + 1) * len(n))
         opponent_rep = np.repeat(opponent, (self.max_goals + 1) * len(n))
@@ -766,9 +761,11 @@ class NeutralDixonColesMatchPredictor:
             jnp.array: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-        (team, opponent, _,) = self._parse_fixture_args(
-            team, opponent, neutral_venue
-        )
+        (
+            team,
+            opponent,
+            _,
+        ) = self._parse_fixture_args(team, opponent, neutral_venue)
         # flat lists of all possible scorelines with team conceding n goals
         team_rep = np.repeat(team, (self.max_goals + 1) * len(n))
         opponent_rep = np.repeat(opponent, (self.max_goals + 1) * len(n))
