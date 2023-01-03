@@ -6,7 +6,6 @@ import pytest
 
 @pytest.fixture
 def dummy_data():
-
     np.random.seed(42)
     home_mean = 2.1
     away_mean = 1.7
@@ -42,6 +41,8 @@ def neutral_dummy_data():
     away_means = [away_mean if venue == 0 else neutral_mean for venue in neutral_venue]
     home_goals = np.random.poisson(home_means)
     away_goals = np.random.poisson(away_means)
+    time_diff = np.linspace(0, 10, num=190)
+    game_weights = np.random.uniform(0, 10, size=190)
 
     teams = [str(i) for i in range(20)]
     matchups = itertools.combinations(teams, 2)
@@ -51,10 +52,18 @@ def neutral_dummy_data():
         home_team.append(a)
         away_team.append(b)
 
+    conferences = [str(i) for i in range(5)]
+    home_conf = np.random.choice(conferences, 190)
+    away_conf = np.random.choice(conferences, 190)
+
     return {
         "home_team": home_team,
         "away_team": away_team,
+        "home_conf": home_conf,
+        "away_conf": away_conf,
         "home_goals": home_goals,
         "away_goals": away_goals,
         "neutral_venue": neutral_venue,
+        "time_diff": time_diff,
+        "game_weights": game_weights,
     }
