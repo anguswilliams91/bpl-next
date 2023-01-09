@@ -522,6 +522,7 @@ class NeutralDixonColesMatchPredictorWC:
         defence = mean_defence + log_b_tilde * self.std_defence
 
         self.teams = np.append(self.teams, team_name)
+        self._teams_dict["team_name"] = len(self._teams_dict)
         self.attack = jnp.concatenate((self.attack, attack[:, None]), axis=1)
         self.defence = jnp.concatenate((self.defence, defence[:, None]), axis=1)
         self.home_attack = jnp.concatenate(
