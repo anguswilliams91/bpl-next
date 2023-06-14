@@ -20,9 +20,17 @@ __all__ = ["ExtendedDixonColesMatchPredictor"]
 
 
 class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
-    """A Dixon-Coles like model for predicting match outcomes."""
+    """
+    A Dixon-Coles like model for predicting match outcomes.
+    - Add separate home advantage and defence & attack ability for each team
+        - Also model correlation between defence and attack abilities 
+    - Add option to include team covariates (used to build informative attack/defence priors)
+        - Initial predictions for newly promoted teams mostly rely on priors so this should improve these
+    - Add option to exponentially downweight games with time (i.e., recent games get more weight)
+    """
 
     def __init__(self):
+        # attributes get populated when self.fit() is called
         self.teams = None
         self.attack = None
         self.defence = None
@@ -47,20 +55,43 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         num_teams: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
+        time_diff: Optional[Iterable[float]],
+        epsilon: Optional[float],
         team_covariates: Optional[np.array],
     ):
+        """
+        Numpyro model definition.
+
+        Note: all arrays except team_covariates have length == number of matches.
+
+        Args:
+            home_team jnp.array: integer indicator of the home team for each match.
+            away_team jnp.array: integer indicator of the away team for each match.
+            num_teams int: number of teams playing.
+            home_goals Iterable[int]: number of goals scored by the home team in each match.
+            away_goals Iterable[int]: number of goals scored by the away team in each match.
+            time_diff Iterable[float]: number of weeks between current game week and match week.
+            epsilon Optional[float]: optional exponential time decay parameter
+            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates]
+        """
+        # prior parameters
+        mean_attack = 0
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
+        mean_home_advantage = numpyro.sample(
+            "mean_home_advantage", dist.Normal(0.1, 0.2)
+        )
         std_home_advantage = numpyro.sample(
             "std_home_advantage", dist.HalfNormal(scale=1.0)
         )
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
+        
+        # parameter used in correction for low score matches (called rho in the Dixon and Cole paper)
         corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
 
-        mean_home_advantage = numpyro.sample(
-            "mean_home_advantage", dist.Normal(0.1, 0.2)
-        )
-
+        # rho parameter accounts for relationship between attack anf defence ability
+        # (strong attackers tend to also be strong defenders)
+        # specify prior on u rather than rho directy
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
 
@@ -88,7 +119,14 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             attack_prior_mean = 0.0
             defence_prior_mean = mean_defence
 
+        # estimate attack/defence/home advantage parameters separately for each team (using numpyro.plate)
         with numpyro.plate("teams", num_teams):
+            # we assume for each team a correlated (rho) deviation from the mean in their attack/defence abilities: 
+            #   - (standardised_attack, standardised_defence) ~ Normal([0, 0], [[1, rho], [rho, 1]])
+            # below we first sample standardised_attack and then sample standardised_defence conditioned on 
+            # the standardised_attack sample:
+            #   - conditional expectation of defence given attack: rho * attack
+            #   - conditional variance of defence given attack: 1 - rho^2
             standardised_attack = numpyro.sample(
                 "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
             )
@@ -98,13 +136,14 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                     loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho**2.0)
                 ),
             )
-
+            # use non centered reparametrisation for home advantage
             with reparam(config={"home_advantage": LocScaleReparam(centered=0)}):
                 home_advantage = numpyro.sample(
                     "home_advantage",
                     dist.Normal(mean_home_advantage, std_home_advantage),
                 )
 
+        # put it all together
         attack = numpyro.deterministic(
             "attack", attack_prior_mean + standardised_attack * std_attack
         )
@@ -112,6 +151,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             "defence", defence_prior_mean + standardised_defence * std_defence
         )
 
+        # all of above is specified on the log scale so exponentiate
+        # these are the poisson lambda parameters for the home and away team
         expected_home_goals = jnp.exp(
             attack[home_team] - defence[away_team] + home_advantage[home_team]
         )
@@ -121,12 +162,25 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
         expected_away_goals = jnp.clip(expected_away_goals, a_max=15.0)
 
-        numpyro.sample(
-            "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
-        )
-        numpyro.sample(
-            "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
-        )
+        # likelihood (with optional decaying weights i.e., weigh recent data more heavily)
+        if epsilon is not None:
+            weights = jnp.exp(-epsilon * time_diff)
+            with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(
+                scale=weights
+            ):
+                numpyro.sample(
+                    "home_goals", dist.Poisson(expected_home_goals), obs=home_goals
+                )
+                numpyro.sample(
+                    "away_goals", dist.Poisson(expected_away_goals), obs=away_goals
+                )
+        else:
+            numpyro.sample(
+                "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
+            )
+            numpyro.sample(
+                "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
+            )
 
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
@@ -137,6 +191,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
+        epsilon: float = 0.0,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
@@ -152,6 +207,10 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
+        # if time_diff is passed in training data, add time decay weighting to model
+        self.time_diff = training_data.get("time_diff", None)
+        self.epsilon = epsilon if self.time_diff is not None else None
+
         if team_covariates:
             if set(team_covariates.keys()) == set(self.teams):
                 team_covariates = jnp.array([team_covariates[t] for t in self.teams])
@@ -162,6 +221,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                     "team_covariates must contain all the teams in the data."
                 )
 
+        # initialize model and inference algorithm
         nuts_kernel = NUTS(self._model)
         mcmc = MCMC(
             nuts_kernel,
@@ -169,6 +229,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             num_samples=num_samples,
             **(mcmc_kwargs or {}),
         )
+
+        # fit model to data
         rng_key = jax.random.PRNGKey(random_state)
         mcmc.run(
             rng_key,
@@ -181,6 +243,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             **(run_kwargs or {}),
         )
 
+        # save posterior samples
         samples = mcmc.get_samples()
         self.attack = samples["attack"]
         self.defence = samples["defence"]
