@@ -21,12 +21,13 @@ __all__ = ["ExtendedDixonColesMatchPredictor"]
 
 class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     """
-    A Dixon-Coles like model for predicting match outcomes.
-    - Add separate home advantage and defence & attack ability for each team
-        - Also model correlation between defence and attack abilities 
-    - Add option to include team covariates (used to build informative attack/defence priors)
-        - Initial predictions for newly promoted teams mostly rely on priors so this should improve these
-    - Add option to exponentially downweight games with time (i.e., recent games get more weight)
+    A Dixon-Coles like model for predicting match outcomes, modified to: 
+    - Estimate correlation between defence and attack abilities
+        - strong defenders tend to also be strong attackers
+    - Add a separate home advantage for each team (not just a single global parameter)
+    - Add option to include team covariates to build informative attack/defence priors
+        - should improve initial predictions for new teams (e.g., due to promotion) which mostly rely on priors 
+    - Add option to exponentially downweigh games with time (i.e., recent games get more weight)
     """
 
     def __init__(self):
@@ -60,7 +61,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         team_covariates: Optional[np.array],
     ):
         """
-        Numpyro model definition.
+        NumPyro model definition.
 
         Note: all arrays except team_covariates have length == number of matches.
 
@@ -71,10 +72,10 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             home_goals Iterable[int]: number of goals scored by the home team in each match.
             away_goals Iterable[int]: number of goals scored by the away team in each match.
             time_diff Iterable[float]: number of weeks between current game week and match week.
-            epsilon Optional[float]: optional exponential time decay parameter
-            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates]
+            epsilon Optional[float]: optional exponential time decay parameter.
+            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates].
         """
-        # prior parameters
+        # default prior parameters for attack/defence/home_advantage
         mean_attack = 0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         mean_home_advantage = numpyro.sample(
@@ -86,15 +87,14 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
         
-        # parameter used in correction for low score matches (called rho in the Dixon and Cole paper)
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
-
-        # rho parameter accounts for relationship between attack anf defence ability
+        # rho parameter accounts for relationship between attack and defence ability
         # (strong attackers tend to also be strong defenders)
-        # specify prior on u rather than rho directy
+        # specify prior on u rather than rho directly (0 <= u <= 1 --> -1 <= rho <= 1)
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
 
+        # if have team covariates, build informative attack/defence prior means for each team
+        # else use same default prior for all teams
         if team_covariates is not None:
             standardised_covariates = (
                 team_covariates - team_covariates.mean(axis=0)
@@ -116,34 +116,34 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                 standardised_covariates, defence_coefficients[..., None]
             ).squeeze(-1)
         else:
-            attack_prior_mean = 0.0
+            attack_prior_mean = mean_attack
             defence_prior_mean = mean_defence
 
-        # estimate attack/defence/home advantage parameters separately for each team (using numpyro.plate)
+        # estimate attack/defence/home advantage parameters separately for each team 
+        # - numpyro.plate ensures we get as many parameters as there are teams
+        # note we are using non centered reparametrisation of all 3 parameters to improve inference
         with numpyro.plate("teams", num_teams):
-            # we assume for each team a correlated (rho) deviation from the mean in their attack/defence abilities: 
+            # we assume for each team rho correlated attack/defence abilities: 
             #   - (standardised_attack, standardised_defence) ~ Normal([0, 0], [[1, rho], [rho, 1]])
-            # below we first sample standardised_attack and then sample standardised_defence conditioned on 
-            # the standardised_attack sample:
-            #   - conditional expectation of defence given attack: rho * attack
+            # sample standardised_attack then standardised_defence conditioned on standardised_attack value:
+            #   - conditional expectation of defence given attack: rho * standardised_attack
             #   - conditional variance of defence given attack: 1 - rho^2
             standardised_attack = numpyro.sample(
                 "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
             )
+            # note if rho=0, below reduces to N(0, 1)
             standardised_defence = numpyro.sample(
                 "standardised_defence",
                 dist.Normal(
                     loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho**2.0)
                 ),
             )
-            # use non centered reparametrisation for home advantage
             with reparam(config={"home_advantage": LocScaleReparam(centered=0)}):
                 home_advantage = numpyro.sample(
                     "home_advantage",
                     dist.Normal(mean_home_advantage, std_home_advantage),
                 )
-
-        # put it all together
+        # centered parametrisation of the attack/defence parameters
         attack = numpyro.deterministic(
             "attack", attack_prior_mean + standardised_attack * std_attack
         )
@@ -151,8 +151,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             "defence", defence_prior_mean + standardised_defence * std_defence
         )
 
-        # all of above is specified on the log scale so exponentiate
-        # these are the poisson lambda parameters for the home and away team
+        # all of above is specified on the log scale so exponentiate to get
+        # poisson lambda parameters for the home and away team
         expected_home_goals = jnp.exp(
             attack[home_team] - defence[away_team] + home_advantage[home_team]
         )
@@ -182,6 +182,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                 "away_goals", dist.Poisson(expected_away_goals).to_event(1), obs=away_goals
             )
 
+        # lastly, apply correction for low score matches (tau in Dixon & Coles paper, corr_coeff=rho)
+        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
         )
@@ -198,6 +200,9 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> ExtendedDixonColesMatchPredictor:
+        """
+        Fit model to data.
+        """
 
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
@@ -263,6 +268,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     def _calculate_expected_goals(
         self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
     ) -> Tuple[jnp.array, jnp.array]:
+        """"""
 
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
@@ -284,6 +290,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         home_goals: Union[int, Iterable[int]],
         away_goals: Union[int, Iterable[int]],
     ) -> jnp.array:
+        """"""
 
         home_team = [home_team] if isinstance(home_team, str) else home_team
         away_team = [away_team] if isinstance(away_team, str) else away_team
@@ -306,6 +313,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         return sampled_probs.mean(axis=0)
 
     def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
+        """"""
         if team_name in self.teams:
             raise ValueError("Team {} already known to model.".format(team_name))
 
