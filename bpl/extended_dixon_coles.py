@@ -13,7 +13,7 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import dixon_coles_correlation_term
+from bpl._util import  compute_corr_coef_bounds, dixon_coles_correlation_term
 from bpl.base import BaseMatchPredictor
 
 __all__ = ["ExtendedDixonColesMatchPredictor"]
@@ -194,8 +194,14 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             )
 
         # lastly, apply correction for low score matches (tau in Dixon & Coles paper, corr_coeff=rho)
+        # impose bounds on the correlation coefficient
         # (numpyro.factor adds log probability to target density)
-        corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
+        corr_coef_raw = numpyro.sample(
+            "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
+        )
+        
+        LB, UB = compute_corr_coef_bounds(expected_home_goals, expected_away_goals)
+        corr_coef = numpyro.deterministic("corr_coef", LB + corr_coef_raw * (UB - LB))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef, weights
         )
