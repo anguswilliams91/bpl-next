@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -28,16 +28,26 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     - Add option to include team covariates to build informative attack/defence priors
         - should improve initial predictions for new teams (e.g., due to promotion) which mostly rely on priors 
     - Add option to exponentially downweigh games with time (i.e., recent games get more weight)
+
+    Note: the model can be used to model/predict a single match or a list of matches, which means input arrays
+    (e.g., name of home/away teams and number of goals scored) have length = number of matches modelled/predicted.
     """
 
     def __init__(self):
         # attributes get populated when self.fit() is called
-        self.teams = None
+
+        # list of all unique team names
+        # used to create integer indicator for each team
+        self.teams = None 
+
+        # MCMC samples for each model parameter 
+        # attack/defence/home_advantage have shape [number of samples, number of teams]
         self.attack = None
         self.defence = None
         self.home_advantage = None
         self.corr_coef = None
         self.rho = None
+        # attack/defence_coefficients have shape [number of samples, number of team_covariates]
         self.attack_coefficients = None
         self.defence_coefficients = None
         self.mean_defence = None
@@ -45,6 +55,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self.std_attack = None
         self.mean_home_advantage = None
         self.std_home_advantage = None
+
+        # mean and std of covariates (use for standardization)
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
@@ -62,8 +74,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     ):
         """
         NumPyro model definition.
-
-        Note: all arrays except team_covariates have length == number of matches.
 
         Args:
             home_team jnp.array: integer indicator of the home team for each match.
@@ -87,12 +97,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
         
-        # rho parameter accounts for relationship between attack and defence ability
-        # (strong attackers tend to also be strong defenders)
-        # specify prior on u rather than rho directly (0 <= u <= 1 --> -1 <= rho <= 1)
-        u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
-        rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
-
         # if have team covariates, build informative attack/defence prior means for each team
         # else use same default prior for all teams
         if team_covariates is not None:
@@ -119,15 +123,19 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             attack_prior_mean = mean_attack
             defence_prior_mean = mean_defence
 
+        # rho parameter accounts for relationship between attack and defence ability
+        # (strong attackers tend to also be strong defenders)
+        # specify prior on u rather than rho directly (beta constraints u to [0,1] so -1 <= rho <= 1)
+        u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
+        rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
+
         # estimate attack/defence/home advantage parameters separately for each team 
         # - numpyro.plate ensures we get as many parameters as there are teams
-        # note we are using non centered reparametrisation of all 3 parameters to improve inference
+        # note we use non centered reparametrisation of all 3 parameters to improve inference
         with numpyro.plate("teams", num_teams):
-            # we assume for each team rho correlated attack/defence abilities: 
+            # assume for each team rho correlated attack/defence abilities: 
             #   - (standardised_attack, standardised_defence) ~ Normal([0, 0], [[1, rho], [rho, 1]])
-            # sample standardised_attack then standardised_defence conditioned on standardised_attack value:
-            #   - conditional expectation of defence given attack: rho * standardised_attack
-            #   - conditional variance of defence given attack: 1 - rho^2
+            # below samples standardised_attack and then standardised_defence conditioned on this value
             standardised_attack = numpyro.sample(
                 "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
             )
@@ -143,7 +151,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                     "home_advantage",
                     dist.Normal(mean_home_advantage, std_home_advantage),
                 )
-        # centered parametrisation of the attack/defence parameters
+        # transform attack/defence parameters back to centered parametrisation 
+        # (this is done automatically for home_advantage with LocScaleReparam)
         attack = numpyro.deterministic(
             "attack", attack_prior_mean + standardised_attack * std_attack
         )
@@ -152,7 +161,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         )
 
         # all of above is specified on the log scale so exponentiate to get
-        # poisson lambda parameters for the home and away team
+        # poisson lambda rate parameters for the home and away teams
         expected_home_goals = jnp.exp(
             attack[home_team] - defence[away_team] + home_advantage[home_team]
         )
@@ -183,6 +192,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             )
 
         # lastly, apply correction for low score matches (tau in Dixon & Coles paper, corr_coeff=rho)
+        # (numpyro.factor adds log probability to target density)
         corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
         corr_term = dixon_coles_correlation_term(
             home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
@@ -203,7 +213,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         """
         Fit model to data.
         """
-
+        # prepare data
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
         team_covariates = training_data.get("team_covariates", None)
@@ -212,10 +222,11 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
-        # if time_diff is passed in training data, add time decay weighting to model
+        # if time_diff is passed in training data, model uses time decay weighting
         self.time_diff = training_data.get("time_diff", None)
         self.epsilon = epsilon if self.time_diff is not None else None
 
+        # if team_covariates are passed, construct informative attack/defence priors
         if team_covariates:
             if set(team_covariates.keys()) == set(self.teams):
                 team_covariates = jnp.array([team_covariates[t] for t in self.teams])
@@ -268,7 +279,16 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     def _calculate_expected_goals(
         self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
     ) -> Tuple[jnp.array, jnp.array]:
-        """"""
+        """
+        Calculate expected goals for home and away team(s) by match.
+
+        Args:
+            home_team Union[str, Iterable[str]]: name of home team(s) for each match.
+            away_team Union[str, Iterable[str]]: name of away team(s) for each  match.
+
+        Returns:
+            Iterable[float], Iterable[float]: expected goals for (home, away) team(s) for each match.
+        """
 
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
@@ -290,7 +310,20 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         home_goals: Union[int, Iterable[int]],
         away_goals: Union[int, Iterable[int]],
     ) -> jnp.array:
-        """"""
+        """
+        Return the probability of a particular scoreline.
+
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            home_goals (Union[int, Iterable[int]]): number of goals scored by
+                the home team(s).
+            away_goals (Union[int, Iterable[int]]): number of goals scored by
+                the away team(s).
+
+        Returns:
+            float: the probability of the given outcome.
+        """
 
         home_team = [home_team] if isinstance(home_team, str) else home_team
         away_team = [away_team] if isinstance(away_team, str) else away_team
@@ -313,10 +346,19 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         return sampled_probs.mean(axis=0)
 
     def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
-        """"""
+        """
+        Build defence/attack/home_advantage parameters for team not seen in the training data. 
+        These are built from default priors unless team covariates are passed.
+
+        Args:
+            team_name str: name of new team.
+            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates].
+        """
         if team_name in self.teams:
             raise ValueError("Team {} already known to model.".format(team_name))
 
+        # can only use team_covariates if coefficients for these were estimated during training
+        # if available, build informative priors, else use defaults
         if self.attack_coefficients is not None:
             if team_covariates is None:
                 warnings.warn(
