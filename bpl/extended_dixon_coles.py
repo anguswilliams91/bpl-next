@@ -68,9 +68,9 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         num_teams: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
+        team_covariates: Optional[np.array],
         time_diff: Optional[Iterable[float]],
         epsilon: Optional[float],
-        team_covariates: Optional[np.array],
     ):
         """
         NumPyro model definition.
@@ -81,9 +81,10 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             num_teams int: number of teams playing.
             home_goals Iterable[int]: number of goals scored by the home team in each match.
             away_goals Iterable[int]: number of goals scored by the away team in each match.
-            time_diff Iterable[float]: number of weeks between current game week and match week.
-            epsilon Optional[float]: optional exponential time decay parameter.
             team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates].
+            epsilon Optional[float]: optional exponential time decay parameter.
+            time_diff Optional[Iterable[float]]: optional number of weeks between current game week 
+                and match week (must be provided if epsilon is provided).
         """
         # default prior parameters for attack/defence/home_advantage
         mean_attack = 0
@@ -203,10 +204,10 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
-        epsilon: float = 0.0,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
+        epsilon: Optional[float] = None,
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> ExtendedDixonColesMatchPredictor:
@@ -222,9 +223,13 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
-        # if time_diff is passed in training data, model uses time decay weighting
+        self.epsilon = epsilon
         self.time_diff = training_data.get("time_diff", None)
-        self.epsilon = epsilon if self.time_diff is not None else None
+        if epsilon is not None:
+            if self.time_diff is None:
+                raise ValueError(
+                    "time_diff must be provided in training_data to include exponential time decay in model."
+                )
 
         # if team_covariates are passed, construct informative attack/defence priors
         if team_covariates:
@@ -250,12 +255,15 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         rng_key = jax.random.PRNGKey(random_state)
         mcmc.run(
             rng_key,
+            # _model are parameters passed here
             home_ind,
             away_ind,
             len(self.teams),
             np.array(training_data["home_goals"]),
             np.array(training_data["away_goals"]),
             team_covariates=team_covariates,
+            time_diff=self.time_diff,
+            epsilon=self.epsilon,
             **(run_kwargs or {}),
         )
 
