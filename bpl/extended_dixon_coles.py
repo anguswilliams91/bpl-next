@@ -185,6 +185,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                     "away_goals", dist.Poisson(expected_away_goals), obs=away_goals
                 )
         else:
+            weights = None
             numpyro.sample(
                 "home_goals", dist.Poisson(expected_home_goals).to_event(1), obs=home_goals
             )
@@ -196,8 +197,9 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         # (numpyro.factor adds log probability to target density)
         corr_coef = numpyro.sample("corr_coef", dist.Normal(0.0, 1.0))
         corr_term = dixon_coles_correlation_term(
-            home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef
+            home_goals, away_goals, expected_home_goals, expected_away_goals, corr_coef, weights
         )
+        print(corr_term.sum(axis=-1))
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
     # pylint: disable=arguments-differ,too-many-arguments
