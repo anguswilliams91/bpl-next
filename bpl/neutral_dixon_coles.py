@@ -29,9 +29,14 @@ __all__ = ["NeutralDixonColesMatchPredictor"]
 class NeutralDixonColesMatchPredictor:
     """
     A Dixon-Coles like model for predicting match outcomes, modified to:
+    - Estimate correlation between defence and attack abilities
+        - strong defenders tend to also be strong attackers
+    - Add a separate home advantage for each team (not just a single global parameter)
+    - Add option to include team covariates to build informative attack/defence priors
+        - should improve initial predictions for new teams (e.g., due to promotion) which mostly rely on priors 
     - Work for matches in neutral venues (e.g. international tournaments)
     - Add separate home & away, defence & attack, advantages/disadvantages for each team
-    - Add possibility to downweight games exponentially according to time
+    - Add option to exponentially downweigh games with time (i.e., recent games get more weight)
     - Add possibility to weight games according to match importance
 
     Note that this is a special case of NeutralDixonColesMatchPredictorWC model where
@@ -41,8 +46,15 @@ class NeutralDixonColesMatchPredictor:
 
     # pylint: disable=duplicate-code
     def __init__(self, max_goals=MAX_GOALS):
+        # attributes get populated when self.fit() is called
+
+        # list of all unique team names
+        # used to create integer indicator for each team
         self.teams = None
         self._teams_dict = None
+        
+        # MCMC samples for each model parameter 
+        # attack/defence/home_advantage have shape [number of samples, number of teams]
         self.attack = None
         self.defence = None
         self.home_attack = None
@@ -55,6 +67,7 @@ class NeutralDixonColesMatchPredictor:
         self.corr_coef = None
         self.u = None
         self.rho = None
+        # attack/defence_coefficients have shape [number of samples, number of team_covariates]
         self.attack_coefficients = None
         self.defence_coefficients = None
         self.mean_attack = None
@@ -71,6 +84,8 @@ class NeutralDixonColesMatchPredictor:
         self.std_away_defence = None
         self.standardised_attack = None
         self.standardised_defence = None
+        
+        # mean and std of covariates (use for standardization)
         self._team_covariates_mean = None
         self._team_covariates_std = None
         self.max_goals = max_goals
@@ -89,6 +104,21 @@ class NeutralDixonColesMatchPredictor:
         game_weights: Optional[Iterable[float]],
         team_covariates: Optional[np.array] = None,
     ):
+        """
+        NumPyro model definition.
+
+        Args:
+            home_team jnp.array: integer indicator of the home team for each match.
+            away_team jnp.array: integer indicator of the away team for each match.
+            num_teams int: number of teams playing.
+            home_goals Iterable[int]: number of goals scored by the home team in each match.
+            away_goals Iterable[int]: number of goals scored by the away team in each match.
+            time_diff Optional[Iterable[float]]: optional time difference between now and when the game was played (must be provided if epsilon is provided).
+            epsilon Optional[float]: optional exponential time decay parameter.
+            game_weights Optional[Iterable[float]]: weights for each game.
+            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates].
+        """
+        # default prior parameters for attack/defence/home_advantage
         mean_attack = 0.0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=0.5))
@@ -106,9 +136,8 @@ class NeutralDixonColesMatchPredictor:
             "std_away_defence", dist.HalfNormal(scale=1.0)
         )
 
-        u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
-        rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
-
+        # if have team covariates, build informative attack/defence prior means for each team
+        # else use same default prior for all teams
         if team_covariates is not None:
             standardised_covariates = (
                 team_covariates - team_covariates.mean(axis=0)
@@ -133,7 +162,19 @@ class NeutralDixonColesMatchPredictor:
             attack_prior_mean = mean_attack
             defence_prior_mean = mean_defence
 
+        # rho parameter accounts for relationship between attack and defence ability
+        # (strong attackers tend to also be strong defenders)
+        # specify prior on u rather than rho directly (beta constraints u to [0,1] so -1 <= rho <= 1)
+        u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
+        rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
+        
+        # estimate attack/defence/home advantage parameters separately for each team 
+        # - numpyro.plate ensures we get as many parameters as there are teams
+        # note we use non centered reparametrisation of all 3 parameters to improve inference
         with numpyro.plate("teams", num_teams):
+            # assume for each team rho correlated attack/defence abilities: 
+            #   - (standardised_attack, standardised_defence) ~ Normal([0, 0], [[1, rho], [rho, 1]])
+            # below samples standardised_attack and then standardised_defence conditioned on this value
             standardised_attack = numpyro.sample(
                 "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
             )
@@ -163,6 +204,8 @@ class NeutralDixonColesMatchPredictor:
                     "away_defence",
                     dist.Normal(mean_away_defence, std_away_defence),
                 )
+        # transform attack/defence parameters back to centered parametrisation 
+        # (this is done automatically for home_advantage with LocScaleReparam)
         attack = numpyro.deterministic(
             "attack", attack_prior_mean + standardised_attack * std_attack
         )
@@ -170,6 +213,8 @@ class NeutralDixonColesMatchPredictor:
             "defence", defence_prior_mean + standardised_defence * std_defence
         )
 
+        # all of above is specified on the log scale so exponentiate to get
+        # poisson lambda rate parameters for the home and away teams
         expected_home_goals = jnp.exp(
             attack[home_team]
             - defence[away_team]
@@ -183,6 +228,7 @@ class NeutralDixonColesMatchPredictor:
             - (1 - neutral_venue) * home_defence[home_team]
         )
 
+        # likelihood (with optional decaying weights i.e.g, weigh recent data more heavily and according to game_weights)
         weights = jnp.ones(len(home_goals))
         if epsilon is not None:
             weights = weights * jnp.exp(-epsilon * time_diff)
@@ -226,6 +272,10 @@ class NeutralDixonColesMatchPredictor:
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> NeutralDixonColesMatchPredictor:
+        """
+        Fit model to data.
+        """
+        # prepare data
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
         team_covariates = training_data.get("team_covariates")
@@ -244,6 +294,7 @@ class NeutralDixonColesMatchPredictor:
                 )
         self.game_weights = training_data.get("game_weights", None)
 
+        # if team_covariates are passed, construct informative attack/defence priors
         if team_covariates:
             if set(team_covariates.keys()) != set(self.teams):
                 raise ValueError(
@@ -253,6 +304,7 @@ class NeutralDixonColesMatchPredictor:
             self._team_covariates_mean = team_covariates.mean(axis=0)
             self._team_covariates_std = team_covariates.std(axis=0)
 
+        # initialize model and inference algorithm
         nuts_kernel = NUTS(self._model)
         mcmc = MCMC(
             nuts_kernel,
@@ -260,6 +312,8 @@ class NeutralDixonColesMatchPredictor:
             num_samples=num_samples,
             **(mcmc_kwargs or {}),
         )
+        
+        # fit model to data
         rng_key = jax.random.PRNGKey(random_state)
         mcmc.run(
             rng_key,
@@ -276,6 +330,7 @@ class NeutralDixonColesMatchPredictor:
             **(run_kwargs or {}),
         )
 
+        # save posterior samples
         samples = mcmc.get_samples()
         self.attack = samples["attack"]
         self.defence = samples["defence"]
