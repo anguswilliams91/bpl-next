@@ -84,9 +84,9 @@ class NeutralDixonColesMatchPredictor:
         home_goals: Iterable[int],
         away_goals: Iterable[int],
         neutral_venue: Iterable[int],
-        time_diff: Iterable[float],
-        epsilon: float,
-        game_weights: Iterable[float],
+        time_diff: Optional[Iterable[float]],
+        epsilon: Optional[float],
+        game_weights: Optional[Iterable[float]],
         team_covariates: Optional[np.array] = None,
     ):
         mean_attack = 0.0
@@ -183,7 +183,12 @@ class NeutralDixonColesMatchPredictor:
             - (1 - neutral_venue) * home_defence[home_team]
         )
 
-        weights = jnp.exp(-epsilon * time_diff) * game_weights
+        weights = jnp.ones(len(home_goals))
+        if epsilon is not None:
+            weights = weights * jnp.exp(-epsilon * time_diff)
+        if weights is not None:
+            weights = weights * game_weights
+        
         with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(
             scale=weights
         ):
@@ -214,7 +219,7 @@ class NeutralDixonColesMatchPredictor:
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
-        epsilon: float = 0.0,
+        epsilon: Optional[float] = None,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
@@ -231,8 +236,13 @@ class NeutralDixonColesMatchPredictor:
         away_ind = jnp.array([self._teams_dict[t] for t in away_team], DTYPES["teams"])
 
         self.epsilon = epsilon
-        self.time_diff = training_data["time_diff"]
-        self.game_weights = training_data["game_weights"]
+        self.time_diff = training_data.get("time_diff", None)
+        if epsilon is not None:
+            if self.time_diff is None:
+                raise ValueError(
+                    "time_diff must be provided in training_data to include exponential time decay in model."
+                )
+        self.game_weights = training_data.get("game_weights", None)
 
         if team_covariates:
             if set(team_covariates.keys()) != set(self.teams):
@@ -260,7 +270,7 @@ class NeutralDixonColesMatchPredictor:
             np.array(training_data["away_goals"]),
             np.array(training_data["neutral_venue"]),
             self.time_diff,
-            epsilon,
+            self.epsilon,
             self.game_weights,
             team_covariates=team_covariates,
             **(run_kwargs or {}),
