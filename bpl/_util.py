@@ -1,7 +1,6 @@
 """Private utility functions."""
 from typing import Iterable, Optional, Tuple, Union
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 

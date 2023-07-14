@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -26,11 +26,14 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         - strong defenders tend to also be strong attackers
     - Add a separate home advantage for each team (not just a single global parameter)
     - Add option to include team covariates to build informative attack/defence priors
-        - should improve initial predictions for new teams (e.g., due to promotion) which mostly rely on priors
-    - Add option to exponentially downweigh games with time (i.e., recent games get more weight)
+        - should improve initial predictions for new teams (e.g., due to promotion)
+          which mostly rely on priors
+    - Add option to exponentially downweigh games with time (i.e., recent games ge
+      more weight)
 
-    Note: the model can be used to model/predict a single match or a list of matches, which means input arrays
-    (e.g., name of home/away teams and number of goals scored) have length = number of matches modelled/predicted.
+    Note: the model can be used to model/predict a single match or a list of matches,
+    which means input arrays (e.g., name of home/away teams and number of goals scored)
+    have length = number of matches modelled/predicted.
     """
 
     def __init__(self):
@@ -47,7 +50,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self.home_advantage = None
         self.corr_coef = None
         self.rho = None
-        # attack/defence_coefficients have shape [number of samples, number of team_covariates]
+        # attack/defence_coefficients have shape
+        # [number of samples, number of team_covariates]
         self.attack_coefficients = None
         self.defence_coefficients = None
         self.mean_defence = None
@@ -59,6 +63,10 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         # mean and std of covariates (use for standardization)
         self._team_covariates_mean = None
         self._team_covariates_std = None
+
+        # optional time weighting parameter
+        self.epsilon = None
+        self.time_diff = None
 
     # pylint: disable=too-many-locals
     @staticmethod
@@ -79,12 +87,15 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             home_team jnp.array: integer indicator of the home team for each match.
             away_team jnp.array: integer indicator of the away team for each match.
             num_teams int: number of teams playing.
-            home_goals Iterable[int]: number of goals scored by the home team in each match.
-            away_goals Iterable[int]: number of goals scored by the away team in each match.
-            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates].
+            home_goals Iterable[int]: number of goals scored by the home team in each
+            match.
+            away_goals Iterable[int]: number of goals scored by the away team in each
+            match.
+            team_covariates Optional[np.array]: optional team covariates
+            [num_teams, num_covariates].
             epsilon Optional[float]: optional exponential time decay parameter.
-            time_diff Optional[Iterable[float]]: optional number of weeks between current game week
-                and match week (must be provided if epsilon is provided).
+            time_diff Optional[Iterable[float]]: optional number of weeks between
+            current game week and match week (must be provided if epsilon is provided).
         """
         # default prior parameters for attack/defence/home_advantage
         mean_attack = 0
@@ -126,17 +137,21 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         # rho parameter accounts for relationship between attack and defence ability
         # (strong attackers tend to also be strong defenders)
-        # specify prior on u rather than rho directly (beta constraints u to [0,1] so -1 <= rho <= 1)
+        # specify prior on u rather than rho directly (beta constraints u to [0,1] so
+        # -1 <= rho <= 1)
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
 
         # estimate attack/defence/home advantage parameters separately for each team
         # - numpyro.plate ensures we get as many parameters as there are teams
-        # note we use non centered reparametrisation of all 3 parameters to improve inference
+        # note we use non centered reparametrisation of all 3 parameters to improve
+        # inference
         with numpyro.plate("teams", num_teams):
             # assume for each team rho correlated attack/defence abilities:
-            #   - (standardised_attack, standardised_defence) ~ Normal([0, 0], [[1, rho], [rho, 1]])
-            # below samples standardised_attack and then standardised_defence conditioned on this value
+            #   (standardised_attack, standardised_defence) ~
+            #         Normal([0, 0],[[1, rho], [rho, 1]])
+            # below samples standardised_attack and then standardised_defence
+            # conditioned on this value
             standardised_attack = numpyro.sample(
                 "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
             )
@@ -172,7 +187,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
         expected_away_goals = jnp.clip(expected_away_goals, a_max=15.0)
 
-        # likelihood (with optional decaying weights i.e., weigh recent data more heavily)
+        # likelihood (with optional decaying weights i.e., weigh recent data more
+        # heavily)
         if epsilon is not None:
             weights = jnp.exp(-epsilon * time_diff)
             with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(
@@ -197,7 +213,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                 obs=away_goals,
             )
 
-        # lastly, apply correction for low score matches (tau in Dixon & Coles paper, corr_coeff=rho)
+        # lastly, apply correction for low score matches (tau in Dixon & Coles paper,
+        # corr_coeff=rho)
         # impose bounds on the correlation coefficient
         corr_coef_raw = numpyro.sample(
             "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
@@ -244,7 +261,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         if epsilon is not None:
             if self.time_diff is None:
                 raise ValueError(
-                    "time_diff must be provided in training_data to include exponential time decay in model."
+                    "time_diff must be provided in training_data to include "
+                    "exponential time decay in model."
                 )
 
         # if team_covariates are passed, construct informative attack/defence priors
@@ -311,7 +329,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             away_team Union[str, Iterable[str]]: name of away team(s) for each  match.
 
         Returns:
-            Iterable[float], Iterable[float]: expected goals for (home, away) team(s) for each match.
+            Iterable[float], Iterable[float]: expected goals for (home, away) team(s)
+            for each match.
         """
 
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
@@ -371,24 +390,25 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
     def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
         """
-        Build defence/attack/home_advantage parameters for team not seen in the training data.
-        These are built from default priors unless team covariates are passed.
+        Build defence/attack/home_advantage parameters for team not seen in the training
+        data. These are built from default priors unless team covariates are passed.
 
         Args:
             team_name str: name of new team.
-            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates].
+            team_covariates Optional[np.array]: optional team covariates
+            [num_teams, num_covariates].
         """
         if team_name in self.teams:
-            raise ValueError("Team {} already known to model.".format(team_name))
+            raise ValueError(f"Team {team_name} already known to model.")
 
-        # can only use team_covariates if coefficients for these were estimated during training
-        # if available, build informative priors, else use defaults
+        # can only use team_covariates if coefficients for these were estimated during
+        # training if available, build informative priors, else use defaults
         if self.attack_coefficients is not None:
             if team_covariates is None:
                 warnings.warn(
-                    "You haven't provided features for {}."
+                    f"You haven't provided features for {team_name}."
                     " Assuming team_covariates are the average of known teams."
-                    " For better forecasts, provide team_covariates.".format(team_name)
+                    " For better forecasts, provide team_covariates."
                 )
                 team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
             else:
