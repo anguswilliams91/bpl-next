@@ -1,5 +1,5 @@
 """Private utility functions."""
-from typing import Iterable, Optional ,Tuple, Union
+from typing import Iterable, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -28,7 +28,7 @@ def dixon_coles_correlation_term(
     away_goals: Union[int, Iterable[int]],
     home_rate: jnp.array,
     away_rate: jnp.array,
-    corr_coef: jnp.array, # rho in dixon and coles
+    corr_coef: jnp.array,  # rho in dixon and coles
     weights: Optional[jnp.array] = None,
     tol: float = 0,  # FIXME workaround to clip negative values to tol to avoid NaNs
 ) -> jnp.array:

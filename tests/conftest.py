@@ -6,7 +6,6 @@ import pytest
 
 @pytest.fixture
 def dummy_data():
-
     np.random.seed(42)
     home_mean = 2.1
     away_mean = 1.7
