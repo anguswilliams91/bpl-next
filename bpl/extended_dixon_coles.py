@@ -215,7 +215,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         # lastly, apply correction for low score matches (tau in Dixon & Coles paper,
         # corr_coeff=rho)
-        # impose bounds on the correlation coefficient
+        # ensure the correlation coefficient is within the expected range set out in the Dixon and Coles paper
         corr_coef_raw = numpyro.sample(
             "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
         )
