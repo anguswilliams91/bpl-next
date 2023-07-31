@@ -255,7 +255,9 @@ class DynamicNeutralDixonColesMatchPredictor:
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> DynamicNeutralDixonColesMatchPredictor:
-
+        """
+        Fit the model.
+        """
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
         team_covariates = training_data.get("team_covariates")
@@ -367,6 +369,9 @@ class DynamicNeutralDixonColesMatchPredictor:
         away_goals: Union[int, Iterable[int]],
         neutral_venue: Union[int, Iterable[int]],
     ) -> jnp.array:
+        """
+        Predict probabilities for scorelines.
+        """
 
         home_team = [home_team] if isinstance(home_team, str) else home_team
         away_team = [away_team] if isinstance(away_team, str) else away_team

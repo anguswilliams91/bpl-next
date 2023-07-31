@@ -15,10 +15,10 @@ from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
 from bpl._util import (
-    str_to_list,
     compute_corr_coef_bounds,
     dixon_coles_correlation_term,
     map_choice,
+    str_to_list,
 )
 from bpl.base import DTYPES, MAX_GOALS
 

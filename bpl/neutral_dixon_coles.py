@@ -15,10 +15,10 @@ from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
 from bpl._util import (
-    str_to_list,
     compute_corr_coef_bounds,
     dixon_coles_correlation_term,
     map_choice,
+    str_to_list,
 )
 from bpl.base import DTYPES, MAX_GOALS
 
@@ -31,17 +31,22 @@ class NeutralDixonColesMatchPredictor:
     A Dixon-Coles like model for predicting match outcomes, modified to:
     - Estimate correlation between defence and attack abilities
         - strong defenders tend to also be strong attackers
-    - Add a separate home advantage for each team (not just a single global parameter)
-    - Add option to include team covariates to build informative attack/defence priors
-        - should improve initial predictions for new teams (e.g., due to promotion) which mostly rely on priors
+    - Add a separate home advantage for each team
+      (not just a single global parameter)
+    - Add option to include team covariates to build informative
+      attack/defence priors
+        - should improve initial predictions for new teams (e.g., due to
+          promotion) which mostly rely on priors
     - Work for matches in neutral venues (e.g. international tournaments)
-    - Add separate home & away, defence & attack, advantages/disadvantages for each team
-    - Add option to exponentially downweigh games with time (i.e., recent games get more weight)
+    - Add separate home & away, defence & attack, advantages/disadvantages
+      for each team
+    - Add option to exponentially downweigh games with time
+      (i.e., recent games get more weight)
     - Add possibility to weight games according to match importance
 
-    Note that this is a special case of NeutralDixonColesMatchPredictorWC model where
-    confederation (or league) strength is not modelled (all teams are assumed to be in
-    the same confederation or league)
+    Note that this is a special case of NeutralDixonColesMatchPredictorWC
+    model where confederation (or league) strength is not modelled
+    (all teams are assumed to be in the same confederation or league).
     """
 
     # pylint: disable=duplicate-code
@@ -111,12 +116,14 @@ class NeutralDixonColesMatchPredictor:
             home_team jnp.array: integer indicator of the home team for each match.
             away_team jnp.array: integer indicator of the away team for each match.
             num_teams int: number of teams playing.
-            home_goals Iterable[int]: number of goals scored by the home team in each match.
-            away_goals Iterable[int]: number of goals scored by the away team in each match.
-            time_diff Optional[Iterable[float]]: optional time difference between now and when the game was played (must be provided if epsilon is provided).
+            home_goals Iterable[int]: goals scored by the home team in each match.
+            away_goals Iterable[int]: goals scored by the away team in each match.
+            time_diff Optional[Iterable[float]]: optional time difference between
+                now and when the game was played (must be provided if epsilon is).
             epsilon Optional[float]: optional exponential time decay parameter.
             game_weights Optional[Iterable[float]]: weights for each game.
-            team_covariates Optional[np.array]: optional team covariates [num_teams, num_covariates].
+            team_covariates Optional[np.array]: optional team covariates
+                [num_teams, num_covariates].
         """
         # default prior parameters for attack/defence/home_advantage
         mean_attack = 0.0

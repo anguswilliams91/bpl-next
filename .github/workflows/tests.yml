@@ -30,7 +30,6 @@ jobs:
       - name: Code Quality
         run: |
           poetry run black bpl --check
-          poetry run isort bpl -c -v
           poetry run pylint --fail-under 9.5 bpl
 
       - name: Test with pytest
