@@ -10,11 +10,11 @@ def dummy_data():
     home_mean = 2.1
     away_mean = 1.7
 
-    home_goals = np.random.poisson(home_mean, size=190)
-    away_goals = np.random.poisson(away_mean, size=190)
+    home_goals = np.random.poisson(home_mean, size=380)
+    away_goals = np.random.poisson(away_mean, size=380)
 
     teams = [str(i) for i in range(20)]
-    matchups = itertools.combinations(teams, 2)
+    matchups = itertools.permutations(teams, 2)
     home_team = []
     away_team = []
     for a, b in matchups:
@@ -31,30 +31,44 @@ def dummy_data():
 
 @pytest.fixture
 def neutral_dummy_data():
+    """
+    Generate data for 20 teams that play each other home and away,
+    (i.e. 380 "league" matches) and then play each other once in neutral venues
+    (another 190 "cup" matches).
+    For the league matches, have time_diff and game_weights constant,
+    while these vary for the neutral "cup" games.
+    """
     np.random.seed(42)
     home_mean = 2.1
     neutral_mean = 1.9
     away_mean = 1.7
-
-    neutral_venue = np.random.binomial(1, 0.5, size=190)
+    neutral_venue = np.array([0]*380+[1]*190)
     home_means = [home_mean if venue == 0 else neutral_mean for venue in neutral_venue]
     away_means = [away_mean if venue == 0 else neutral_mean for venue in neutral_venue]
     home_goals = np.random.poisson(home_means)
     away_goals = np.random.poisson(away_means)
-    time_diff = np.linspace(0, 10, num=190)
-    game_weights = np.random.uniform(0, 10, size=190)
+    time_diff_league = np.array([1.]*380)
+    time_diff_cup = np.linspace(0, 10, num=190)
+    time_diff = np.concatenate([time_diff_league, time_diff_cup])
+    game_weights_league = np.array([1.]*380)
+    game_weights_cup = np.random.uniform(0, 10, size=190)
+    game_weights = np.concatenate([game_weights_league, game_weights_cup])
 
     teams = [str(i) for i in range(20)]
-    matchups = itertools.combinations(teams, 2)
+    league_matchups = itertools.permutations(teams, 2)
     home_team = []
     away_team = []
-    for a, b in matchups:
+    for a, b in league_matchups:
+        home_team.append(a)
+        away_team.append(b)
+    cup_matchups = itertools.combinations(teams, 2)
+    for a, b in cup_matchups:
         home_team.append(a)
         away_team.append(b)
 
-    conferences = [str(i) for i in range(5)]
-    home_conf = np.random.choice(conferences, 190)
-    away_conf = np.random.choice(conferences, 190)
+    # deterministic assignment of teams to conferences
+    home_conf = [str(int(ht)//4) for ht in home_team]
+    away_conf = [str(int(at)//4) for at in away_team]
 
     return {
         "home_team": home_team,

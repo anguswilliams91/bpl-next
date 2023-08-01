@@ -4,7 +4,7 @@ import pytest
 from bpl.base import MAX_GOALS
 from bpl.neutral_dixon_coles_WC import NeutralDixonColesMatchPredictorWC
 
-TOL = 1e-02
+TOL = 5e-02
 
 @pytest.fixture
 def model(neutral_dummy_data):

@@ -62,7 +62,7 @@ def test_predict_score_n_proba(model):
     assert sum(proba_home) == pytest.approx(1.0, abs=TOL)
 
     proba_away = model.predict_score_n_proba(n, "0", "1", home=False)
-    assert len(proba_home) == len(n)
+    assert len(proba_away) == len(n)
     assert jnp.all((proba_away >= 0) & (proba_away <= 1))
     assert sum(proba_away) == pytest.approx(1.0, abs=TOL)
 
@@ -81,7 +81,7 @@ def test_predict_concede_n_proba(model):
     assert sum(proba_home) == pytest.approx(1.0, abs=TOL)
 
     proba_away = model.predict_concede_n_proba(n, "0", "1", home=False)
-    assert len(proba_home) == len(n)
+    assert len(proba_away) == len(n)
     assert jnp.all((proba_away >= 0) & (proba_away <= 1))
     assert sum(proba_away) == pytest.approx(1.0, abs=TOL)
 
