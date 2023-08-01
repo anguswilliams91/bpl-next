@@ -8,7 +8,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -19,10 +18,8 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-
+        uses: snok/install-poetry@v1.3.3
       - name: Install Dependencies
         run: poetry install
 
@@ -30,7 +27,7 @@ jobs:
       - name: Code Quality
         run: |
           poetry run black bpl --check
-          poetry run isort bpl -c -v
+	  poetry run isort bpl -c -v
           poetry run pylint --fail-under 9.5 bpl
 
       - name: Test with pytest

@@ -8,6 +8,13 @@ import jax.numpy as jnp
 import numpy as np
 
 MAX_GOALS = 15
+DTYPES = {
+    "goals": "uint8",
+    "teams": "uint16",
+    "conferences": "uint8",
+    "venue": "uint8",
+    "outcome": "uint8",
+}
 
 
 class BaseMatchPredictor:

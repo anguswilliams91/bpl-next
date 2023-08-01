@@ -19,6 +19,7 @@ from bpl.base import BaseMatchPredictor
 __all__ = ["ExtendedDixonColesMatchPredictor"]
 
 
+# pylint: disable=too-many-instance-attributes
 class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     """
     A Dixon-Coles like model for predicting match outcomes, modified to:
@@ -36,6 +37,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     have length = number of matches modelled/predicted.
     """
 
+    # pylint: disable=duplicate-code
     def __init__(self):
         # attributes get populated when self.fit() is called
 
@@ -68,7 +70,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self.epsilon = None
         self.time_diff = None
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -80,6 +82,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         time_diff: Optional[Iterable[float]],
         epsilon: Optional[float],
     ):
+
         """
         NumPyro model definition.
 
@@ -106,8 +109,11 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         std_home_advantage = numpyro.sample(
             "std_home_advantage", dist.HalfNormal(scale=1.0)
         )
+        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
+        u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
+        rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
 
         # if have team covariates, build informative attack/defence prior means for each team
         # else use same default prior for all teams
@@ -233,7 +239,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         # numpyro.factor adds log probability to target density
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments
+    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
@@ -388,7 +394,9 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
 
-    def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
+
+    def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None
+    ) -> None:
         """
         Build defence/attack/home_advantage parameters for team not seen in the training
         data. These are built from default priors unless team covariates are passed.

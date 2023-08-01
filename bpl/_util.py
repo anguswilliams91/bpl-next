@@ -5,6 +5,9 @@ import jax.numpy as jnp
 import numpy as np
 
 
+def str_to_list(*args):
+    return ([x] if isinstance(x, str) else x for x in args)
+
 def compute_corr_coef_bounds(
     expected_home_goals: jnp.array, expected_away_goals: jnp.array
 ) -> Tuple[float, float]:
@@ -21,23 +24,27 @@ def compute_corr_coef_bounds(
     )
     return LB, UB
 
-
+# pylint: disable=too-many-arguments
 def dixon_coles_correlation_term(
     home_goals: Union[int, Iterable[int]],
     away_goals: Union[int, Iterable[int]],
     home_rate: jnp.array,
     away_rate: jnp.array,
-    corr_coef: jnp.array,  # rho in dixon and coles
+    corr_coef: jnp.array,
     weights: Optional[jnp.array] = None,
-    tol: float = 0,  # FIXME workaround to clip negative values to tol to avoid NaNs
+    tol: Optional[
+        float
+    ] = 0,  # FIXME workaround to clip negative values to tol to avoid NaNs
 ) -> jnp.array:
     """
-    Correlation term (tau) from Dixon and Coles paper.
+    Calculate correlation term from dixon and coles paper
     """
     if isinstance(home_goals, int):
         home_goals = np.array(home_goals).reshape((1,))
     if isinstance(away_goals, int):
         away_goals = np.array(away_goals).reshape((1,))
+    if weights is None:
+        weights = jnp.ones(len(home_goals))
 
     corr_term = jnp.zeros_like(home_rate)
     if weights is None:
@@ -62,9 +69,8 @@ def dixon_coles_correlation_term(
         weights[..., one_nil]
         * jnp.log(
             jnp.clip(1.0 + corr_coef[..., None] * away_rate[..., one_nil], a_min=tol)
-        ),
+        )
     )
-
     nil_one = (home_goals == 0) & (away_goals == 1)
     corr_term = corr_term.at[..., nil_one].set(
         weights[..., nil_one]
@@ -80,3 +86,18 @@ def dixon_coles_correlation_term(
     )
 
     return corr_term
+
+
+def map_choice(key, a, num_samples, p):
+    def _map_choice_once(probs_and_key):
+        probs, rng_key = probs_and_key
+        choices = jax.random.choice(
+            rng_key,
+            a,
+            shape=(num_samples,),
+            p=probs,
+        )
+        return choices
+
+    new_keys = jax.random.split(key, p.shape[0])
+    return jax.vmap(_map_choice_once)((p, new_keys))
