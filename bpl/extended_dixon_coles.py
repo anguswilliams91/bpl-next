@@ -82,7 +82,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         time_diff: Optional[Iterable[float]],
         epsilon: Optional[float],
     ):
-
         """
         NumPyro model definition.
 
