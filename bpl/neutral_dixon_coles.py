@@ -171,16 +171,18 @@ class NeutralDixonColesMatchPredictor:
 
         # rho parameter accounts for relationship between attack and defence ability
         # (strong attackers tend to also be strong defenders)
-        # specify prior on u rather than rho directly (beta constraints u to [0,1] so -1 <= rho <= 1)
+        # specify prior on u rather than rho directly (beta constraints u to [0,1]
+        # so -1 <= rho <= 1)
         u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
         rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
 
         # estimate attack/defence/home advantage parameters separately for each team
         # - numpyro.plate ensures we get as many parameters as there are teams
-        # note we use non centered reparametrisation of all 3 parameters to improve inference
+        # note we use non centered reparametrisation of all 3 parameters to improve
+        # inference
         with numpyro.plate("teams", num_teams):
             # assume for each team rho correlated attack/defence abilities:
-            #   - (standardised_attack, standardised_defence) ~ Normal([0, 0], [[1, rho], [rho, 1]])
+            # - (standardised_att, standardised_def) ~ Normal([0, 0], [[1, rho], [rho, 1]])
             # below samples standardised_attack and then standardised_defence conditioned on this value
             standardised_attack = numpyro.sample(
                 "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
@@ -235,7 +237,8 @@ class NeutralDixonColesMatchPredictor:
             - (1 - neutral_venue) * home_defence[home_team]
         )
 
-        # likelihood (with optional decaying weights i.e.g, weigh recent data more heavily and according to game_weights)
+        # likelihood (with optional decaying weights i.e.,
+        # weigh recent data more heavily and according to game_weights)
         weights = jnp.ones(len(home_goals))
         if epsilon is not None:
             weights = weights * jnp.exp(-epsilon * time_diff)
@@ -297,7 +300,10 @@ class NeutralDixonColesMatchPredictor:
         if epsilon is not None:
             if self.time_diff is None:
                 raise ValueError(
-                    "time_diff must be provided in training_data to include exponential time decay in model."
+                    """
+                    time_diff must be provided in training_data
+                    to include exponential time decay in model.
+                    """
                 )
         self.game_weights = training_data.get("game_weights", None)
 

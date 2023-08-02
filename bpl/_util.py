@@ -1,12 +1,17 @@
 """Private utility functions."""
 from typing import Iterable, Optional, Tuple, Union
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
 
 def str_to_list(*args):
+    """
+    convert all elements of a list into strings.
+    """
     return ([x] if isinstance(x, str) else x for x in args)
+
 
 def compute_corr_coef_bounds(
     expected_home_goals: jnp.array, expected_away_goals: jnp.array
@@ -24,6 +29,7 @@ def compute_corr_coef_bounds(
     )
     return LB, UB
 
+
 # pylint: disable=too-many-arguments
 def dixon_coles_correlation_term(
     home_goals: Union[int, Iterable[int]],
@@ -32,9 +38,7 @@ def dixon_coles_correlation_term(
     away_rate: jnp.array,
     corr_coef: jnp.array,
     weights: Optional[jnp.array] = None,
-    tol: Optional[
-        float
-    ] = 0,  # FIXME workaround to clip negative values to tol to avoid NaNs
+    tol: Optional[float] = 0,  # workaround to clip negative values to tol to avoid NaNs
 ) -> jnp.array:
     """
     Calculate correlation term from dixon and coles paper
@@ -89,6 +93,10 @@ def dixon_coles_correlation_term(
 
 
 def map_choice(key, a, num_samples, p):
+    """
+    Map choices.
+    """
+
     def _map_choice_once(probs_and_key):
         probs, rng_key = probs_and_key
         choices = jax.random.choice(
