@@ -102,7 +102,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         """
         # default prior parameters for attack/defence/home_advantage
         mean_attack = 0
-        mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         mean_home_advantage = numpyro.sample(
             "mean_home_advantage", dist.Normal(0.1, 0.2)
         )
@@ -112,8 +111,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
-        u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
-        rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
 
         # if have team covariates, build informative attack/defence prior means for each team
         # else use same default prior for all teams
@@ -394,8 +391,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
 
-
-    def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None
+    def add_new_team(
+        self, team_name: str, team_covariates: Optional[np.array] = None
     ) -> None:
         """
         Build defence/attack/home_advantage parameters for team not seen in the training
