@@ -88,7 +88,6 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> DixonColesMatchPredictor:
-
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
 
@@ -125,7 +124,6 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
     def _calculate_expected_goals(
         self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
     ) -> Tuple[jnp.array, jnp.array]:
-
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
@@ -144,7 +142,6 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         home_goals: Union[int, Iterable[int]],
         away_goals: Union[int, Iterable[int]],
     ) -> jnp.array:
-
         home_team = [home_team] if isinstance(home_team, str) else home_team
         away_team = [away_team] if isinstance(away_team, str) else away_team
 

@@ -7,6 +7,9 @@ import numpy as np
 
 
 def str_to_list(*args):
+    """
+    convert all elements of a list into strings.
+    """
     return ([x] if isinstance(x, str) else x for x in args)
 
 
@@ -35,9 +38,7 @@ def dixon_coles_correlation_term(
     away_rate: jnp.array,
     corr_coef: jnp.array,
     weights: Optional[jnp.array] = None,
-    tol: Optional[
-        float
-    ] = 0,  # FIXME workaround to clip negative values to tol to avoid NaNs
+    tol: Optional[float] = 0,  # workaround to clip negative values to tol to avoid NaNs
 ) -> jnp.array:
     """
     Calculate correlation term from dixon and coles paper
@@ -50,6 +51,8 @@ def dixon_coles_correlation_term(
         weights = jnp.ones(len(home_goals))
 
     corr_term = jnp.zeros_like(home_rate)
+    if weights is None:
+        weights = jnp.ones_like(corr_term)
 
     nil_nil = (home_goals == 0) & (away_goals == 0)
     corr_term = corr_term.at[..., nil_nil].set(
@@ -76,22 +79,24 @@ def dixon_coles_correlation_term(
     corr_term = corr_term.at[..., nil_one].set(
         weights[..., nil_one]
         * jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], a_min=tol),
-        )
+            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], a_min=tol)
+        ),
     )
 
     one_one = (home_goals == 1) & (away_goals == 1)
     corr_term = corr_term.at[..., one_one].set(
         weights[..., one_one]
-        * jnp.log(
-            jnp.clip(1.0 - corr_coef[..., None], a_min=tol),
-        )
+        * jnp.log(jnp.clip(1.0 - corr_coef[..., None], a_min=tol)),
     )
 
     return corr_term
 
 
 def map_choice(key, a, num_samples, p):
+    """
+    Map choices.
+    """
+
     def _map_choice_once(probs_and_key):
         probs, rng_key = probs_and_key
         choices = jax.random.choice(

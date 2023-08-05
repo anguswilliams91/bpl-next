@@ -338,7 +338,6 @@ class DynamicNeutralDixonColesMatchPredictor:
         away_team: Union[str, Iterable[str]],
         neutral_venue: Union[int, Iterable[int]],
     ) -> Tuple[jnp.array, jnp.array]:
-
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
         neutral_venue = jnp.array(neutral_venue)

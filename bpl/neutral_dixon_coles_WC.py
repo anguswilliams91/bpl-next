@@ -237,6 +237,9 @@ class NeutralDixonColesMatchPredictorWC:
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> NeutralDixonColesMatchPredictorWC:
+        """
+        Fit the model.
+        """
         home_team = training_data["home_team"]
         away_team = training_data["away_team"]
         team_covariates = training_data.get("team_covariates")
@@ -811,7 +814,13 @@ class NeutralDixonColesMatchPredictorWC:
             jnp.array: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-        (team, opponent, team_conf, opponent_conf, _,) = self._parse_fixture_args(
+        (
+            team,
+            opponent,
+            team_conf,
+            opponent_conf,
+            _,
+        ) = self._parse_fixture_args(
             team, opponent, team_conf, opponent_conf, neutral_venue
         )
         # flat lists of all possible scorelines with team scoring n goals
@@ -877,7 +886,13 @@ class NeutralDixonColesMatchPredictorWC:
             jnp.array: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-        (team, opponent, team_conf, opponent_conf, _,) = self._parse_fixture_args(
+        (
+            team,
+            opponent,
+            team_conf,
+            opponent_conf,
+            _,
+        ) = self._parse_fixture_args(
             team, opponent, team_conf, opponent_conf, neutral_venue
         )
         # flat lists of all possible scorelines with team conceding n goals

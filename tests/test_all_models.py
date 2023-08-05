@@ -10,7 +10,6 @@ MODELS = [DixonColesMatchPredictor, ExtendedDixonColesMatchPredictor]
 
 @pytest.mark.parametrize("model_cls", MODELS)
 def test_predict_score_proba(dummy_data, model_cls):
-
     model = model_cls().fit(dummy_data, num_samples=100, num_warmup=100)
 
     probs = model.predict_score_proba(
