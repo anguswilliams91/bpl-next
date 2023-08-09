@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Dict, Iterable, Optional, Union
+from datetime import datetime
+from typing import Dict, Iterable, Optional, Tuple, Union
 
+import jax
 import jax.numpy as jnp
 import numpy as np
+
+from bpl._util import map_choice, str_to_list
 
 MAX_GOALS = 15
 DTYPES = {
@@ -19,6 +23,12 @@ DTYPES = {
 
 class BaseMatchPredictor:
     """Abstract class for models of football matches."""
+
+    def __init__(self):
+        # list of all unique team names used to create integer indicator for each team
+        # and dict mapping from the team names to their corresponding integer indicator
+        self.teams = None
+        self._teams_dict = None
 
     @abstractmethod
     def fit(
@@ -48,8 +58,62 @@ class BaseMatchPredictor:
             float: the probability of the given outcome.
         """
 
+    def _parse_fixture_args(self, home_team, away_team):
+        home_team, away_team = str_to_list(home_team, away_team)
+        if isinstance(home_team[0], str):
+            home_team = jnp.array(
+                [self._teams_dict[t] for t in home_team], DTYPES["teams"]
+            )
+        if isinstance(away_team[0], str):
+            away_team = jnp.array(
+                [self._teams_dict[t] for t in away_team], DTYPES["teams"]
+            )
+        return home_team, away_team
+
+    def predict_score_grid_proba(
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        max_goals: Optional[int] = MAX_GOALS,
+    ) -> Tuple[jnp.array, np.array, np.array]:
+        """Calculate scoreline probabilities between two teams.
+
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            max_goals (Optional[int]): Compute scorelines where each team scores up to
+                this many goals. Defaults to bpl.base.MAX_GOALS.
+
+        Returns:
+            Tuple[jnp.array, np.array, np.array]: Tuple of the following grids (as arrays):
+                probability of scorelines, home goals and away goals scored grids
+        """
+        home_team, away_team = self._parse_fixture_args(home_team, away_team)
+
+        n_goals = np.arange(0, max_goals + 1)
+        home_goals, away_goals = np.meshgrid(n_goals, n_goals, indexing="ij")
+        home_goals_flat = jnp.tile(
+            home_goals.reshape((max_goals + 1) ** 2), len(home_team)
+        )
+        away_goals_flat = jnp.tile(
+            away_goals.reshape((max_goals + 1) ** 2), len(home_team)
+        )
+        home_team_rep = np.repeat(home_team, (max_goals + 1) ** 2)
+        away_team_rep = np.repeat(away_team, (max_goals + 1) ** 2)
+
+        probs = self.predict_score_proba(
+            home_team_rep,
+            away_team_rep,
+            home_goals_flat,
+            away_goals_flat,
+        ).reshape(len(home_team), max_goals + 1, max_goals + 1)
+        return probs, home_goals, away_goals
+
     def predict_outcome_proba(
-        self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        max_goals: Optional[int] = MAX_GOALS,
     ) -> Dict[str, jnp.array]:
         """Calculate home win, away win and draw probabilities.
 
@@ -59,33 +123,126 @@ class BaseMatchPredictor:
         Args:
             home_team (Union[str, Iterable[str]]): name of the home team(s).
             away_team (Union[str, Iterable[str]]): name of the away team(s).
+            max_goals (Optional[int]): Compute scorelines where each team scores up to
+                this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
             Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
-                "away_win" and "draw". Values are probabilities of each outcome.
+                "draw" and "away_win". Values are probabilities of each outcome.
         """
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
-
-        # make a grid of scorelines up to plausible limits
-        n_goals = np.arange(0, MAX_GOALS + 1)
-        x, y = np.meshgrid(n_goals, n_goals, indexing="ij")
-        x_flat = jnp.tile(x.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        y_flat = jnp.tile(y.reshape((MAX_GOALS + 1) ** 2), len(home_team))
-        home_team_rep = np.repeat(home_team, (MAX_GOALS + 1) ** 2)
-        away_team_rep = np.repeat(away_team, (MAX_GOALS + 1) ** 2)
-
-        # evaluate the probability of scorelines at each gridpoint
-        probs = self.predict_score_proba(
-            home_team_rep, away_team_rep, x_flat, y_flat
-        ).reshape(len(home_team), MAX_GOALS + 1, MAX_GOALS + 1)
-
+        home_team, away_team = self._parse_fixture_args(home_team, away_team)
+        # compute probabilities for all scorelines
+        probs, home_goals, away_goals = self.predict_score_grid_proba(
+            home_team, away_team, max_goals=max_goals
+        )
         # obtain outcome probabilities by summing the appropriate elements of the grid
-        prob_home_win = probs[:, x > y].sum(axis=-1)
-        prob_away_win = probs[:, x < y].sum(axis=-1)
-        prob_draw = probs[:, x == y].sum(axis=-1)
+        home_win = probs[:, home_goals > away_goals].sum(axis=-1)
+        draw = probs[:, home_goals == away_goals].sum(axis=-1)
+        away_win = probs[:, home_goals < away_goals].sum(axis=-1)
 
-        return {"home_win": prob_home_win, "away_win": prob_away_win, "draw": prob_draw}
+        return {
+            "home_win": home_win,
+            "draw": draw,
+            "away_win": away_win,
+        }
+
+    def sample_score(
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        num_samples: int = 1,
+        random_state: int = None,
+        max_goals: Optional[int] = MAX_GOALS,
+    ) -> Dict[str, jnp.array]:
+        """Sample scoreline between two teams.
+
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            num_samples (int, optional): number of simulations. Defaults to 1.
+            random_state (int, optional): seed. Defaults to None.
+            max_goals (Optional[int]): Compute scorelines where each team scores up to
+                this many goals. Defaults to bpl.base.MAX_GOALS.
+
+        Returns:
+            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_score" and
+                "away_score". Values are the simulated goals scored in each simulation.
+        """
+        home_team, away_team = self._parse_fixture_args(home_team, away_team)
+        if random_state is None:
+            random_state = int(datetime.now().timestamp() * 100)
+
+        probs, home_goals, away_goals = self.predict_score_grid_proba(
+            home_team,
+            away_team,
+            max_goals=max_goals,
+        )
+
+        home_goals = jnp.array(home_goals.flatten(), DTYPES["goals"])
+        away_goals = jnp.array(away_goals.flatten(), DTYPES["goals"])
+
+        rng_key = jax.random.PRNGKey(random_state)
+        sample_idx = map_choice(
+            rng_key,
+            jnp.arange(len(home_goals), dtype="uint32"),
+            num_samples,
+            probs.reshape((len(home_team), -1)),
+        )
+        sample_scores_home = home_goals[sample_idx]
+        sample_scores_away = away_goals[sample_idx]
+
+        return {"home_score": sample_scores_home, "away_score": sample_scores_away}
+
+    def sample_outcome(
+        self,
+        home_team: Union[str, Iterable[str]],
+        away_team: Union[str, Iterable[str]],
+        num_samples: int = 1,
+        random_state: int = None,
+        max_goals: Optional[int] = MAX_GOALS,
+    ) -> np.array:
+        """Sample outcome of match between two teams.
+
+        Args:
+            home_team (Union[str, Iterable[str]]): name of the home team(s).
+            away_team (Union[str, Iterable[str]]): name of the away team(s).
+            num_samples (int, optional): number of simulations. Defaults to 1.
+            random_state (int, optional): seed. Defaults to None.
+            max_goals (Optional[int]): Compute scorelines where each team scores up to
+                this many goals. Defaults to bpl.base.MAX_GOALS.
+
+        Returns:
+            np.array: Array of strings representing the winning team or 'Draw'
+        """
+        home_team, away_team = self._parse_fixture_args(home_team, away_team)
+
+        if random_state is None:
+            random_state = int(datetime.now().timestamp() * 100)
+
+        probs = self.predict_outcome_proba(home_team, away_team, max_goals=max_goals)
+        probs = jnp.array([probs["home_win"], probs["draw"], probs["away_win"]]).T
+
+        rng_key = jax.random.PRNGKey(random_state)
+        sample_idx = map_choice(
+            rng_key,
+            jnp.arange(probs.shape[1], dtype="uint32"),
+            num_samples,
+            probs,
+        )
+
+        winner = np.empty((len(home_team), num_samples), dtype=DTYPES["teams"])
+        home_team_rep = home_team.repeat(num_samples).reshape(
+            (len(home_team), num_samples)
+        )
+        away_team_rep = away_team.repeat(num_samples).reshape(
+            (len(home_team), num_samples)
+        )
+        winner[sample_idx == 0] = home_team_rep[sample_idx == 0]
+        winner[sample_idx == 2] = away_team_rep[sample_idx == 2]
+        winner[sample_idx == 1] = len(self.teams)  # Temporary index for 'Draw'
+
+        _teams_with_draw = np.append(self.teams, "Draw")
+        return _teams_with_draw[winner]
 
     def predict_score_n_proba(
         self,
@@ -93,6 +250,7 @@ class BaseMatchPredictor:
         team: Union[str, Iterable[str]],
         opponent: Union[str, Iterable[str]],
         home: Optional[bool] = True,
+        max_goals: Optional[int] = MAX_GOALS,
     ) -> jnp.array:
         """
         Compute the probability that a team will score n goals.
@@ -104,23 +262,35 @@ class BaseMatchPredictor:
             team (Union[str, Iterable[str]]): name of the team scoring the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
+            max_goals (Optional[int]): Compute scorelines where each team scores up to
+                this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
             jnp.array: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-
+        team, opponent = self._parse_fixture_args(team, opponent)
         # flat lists of all possible scorelines with team scoring n goals
-        team_rep = np.repeat(team, (MAX_GOALS + 1) * len(n))
-        opponent_rep = np.repeat(opponent, (MAX_GOALS + 1) * len(n))
-        n_rep = np.resize(n, (MAX_GOALS + 1) * len(n))
-        x_rep = np.repeat(np.arange(MAX_GOALS + 1), len(n))
+        team_rep = np.repeat(team, (max_goals + 1) * len(n))
+        opponent_rep = np.repeat(opponent, (max_goals + 1) * len(n))
+        n_rep = np.resize(n, (max_goals + 1) * len(n))
+        x_rep = np.repeat(np.arange(max_goals + 1), len(n))
 
         probs = (
-            self.predict_score_proba(team_rep, opponent_rep, n_rep, x_rep)
+            self.predict_score_proba(
+                team_rep,
+                opponent_rep,
+                n_rep,
+                x_rep,
+            )
             if home
-            else self.predict_score_proba(opponent_rep, team_rep, x_rep, n_rep)
-        ).reshape(MAX_GOALS + 1, len(n))
+            else self.predict_score_proba(
+                opponent_rep,
+                team_rep,
+                x_rep,
+                n_rep,
+            )
+        ).reshape(max_goals + 1, len(n))
 
         # sum probability of all scorelines where team scored n goals
         return probs.sum(axis=0)
@@ -131,6 +301,7 @@ class BaseMatchPredictor:
         team: Union[str, Iterable[str]],
         opponent: Union[str, Iterable[str]],
         home: Optional[bool] = True,
+        max_goals: Optional[int] = MAX_GOALS,
     ) -> jnp.array:
         """
         Compute the probability that a team will concede n goals.
@@ -142,23 +313,35 @@ class BaseMatchPredictor:
             team (Union[str, Iterable[str]]): name of the team conceding the goals.
             opponent (Union[str, Iterable[str]]): name of the opponent.
             home (Optional[bool]): whether team is at home.
+            max_goals (Optional[int]): Compute scorelines where each team scores up to
+                this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
             jnp.array: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
-
+        team, opponent = self._parse_fixture_args(team, opponent)
         # flat lists of all possible scorelines with team conceding n goals
-        team_rep = np.repeat(team, (MAX_GOALS + 1) * len(n))
-        opponent_rep = np.repeat(opponent, (MAX_GOALS + 1) * len(n))
-        n_rep = np.resize(n, (MAX_GOALS + 1) * len(n))
-        x_rep = np.repeat(np.arange(MAX_GOALS + 1), len(n))
+        team_rep = np.repeat(team, (max_goals + 1) * len(n))
+        opponent_rep = np.repeat(opponent, (max_goals + 1) * len(n))
+        n_rep = np.resize(n, (max_goals + 1) * len(n))
+        x_rep = np.repeat(np.arange(max_goals + 1), len(n))
 
         probs = (
-            self.predict_score_proba(team_rep, opponent_rep, x_rep, n_rep)
+            self.predict_score_proba(
+                team_rep,
+                opponent_rep,
+                x_rep,
+                n_rep,
+            )
             if home
-            else self.predict_score_proba(opponent_rep, team_rep, n_rep, x_rep)
-        ).reshape(MAX_GOALS + 1, len(n))
+            else self.predict_score_proba(
+                opponent_rep,
+                team_rep,
+                n_rep,
+                x_rep,
+            )
+        ).reshape(max_goals + 1, len(n))
 
         # sum probability all scorelines where team conceded n goals
         return probs.sum(axis=0)

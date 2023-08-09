@@ -12,8 +12,12 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term
-from bpl.base import BaseMatchPredictor
+from bpl._util import (
+    compute_corr_coef_bounds,
+    dixon_coles_correlation_term,
+    parse_teams,
+)
+from bpl.base import DTYPES, BaseMatchPredictor
 
 __all__ = ["DixonColesMatchPredictor"]
 
@@ -23,7 +27,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
 
     # pylint: disable=duplicate-code
     def __init__(self):
-        self.teams = None
+        super().__init__()
         self.attack = None
         self.defence = None
         self.home_advantage = None
@@ -88,12 +92,9 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> DixonColesMatchPredictor:
-        home_team = training_data["home_team"]
-        away_team = training_data["away_team"]
-
-        self.teams = sorted(list(set(home_team) | set(away_team)))
-        home_ind = jnp.array([self.teams.index(t) for t in home_team])
-        away_ind = jnp.array([self.teams.index(t) for t in away_team])
+        self.teams, self._teams_dict, home_ind, away_ind = parse_teams(
+            training_data["home_team"], training_data["away_team"], DTYPES["teams"]
+        )
 
         nuts_kernel = NUTS(self._model)
         mcmc = MCMC(
@@ -124,8 +125,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
     def _calculate_expected_goals(
         self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
     ) -> Tuple[jnp.array, jnp.array]:
-        home_ind = jnp.array([self.teams.index(t) for t in home_team])
-        away_ind = jnp.array([self.teams.index(t) for t in away_team])
+        home_ind, away_ind = self._parse_fixture_args(home_team, away_team)
 
         attack_home, defence_home = self.attack[:, home_ind], self.defence[:, home_ind]
         attack_away, defence_away = self.attack[:, away_ind], self.defence[:, away_ind]
@@ -142,8 +142,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         home_goals: Union[int, Iterable[int]],
         away_goals: Union[int, Iterable[int]],
     ) -> jnp.array:
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
+        home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(
             home_team, away_team
