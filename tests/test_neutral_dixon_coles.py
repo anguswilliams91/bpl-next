@@ -6,6 +6,7 @@ from bpl.neutral_dixon_coles import NeutralDixonColesMatchPredictor
 
 TOL = 1e-02
 
+
 @pytest.fixture
 def model(neutral_dummy_data):
     return NeutralDixonColesMatchPredictor().fit(neutral_dummy_data)
