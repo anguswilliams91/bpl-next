@@ -1,4 +1,7 @@
-"""Shared tests across all models, e.g. checking probabilities are valid."""
+"""
+Shared tests across all models that inherit from BaseMatchPredictor, e.g. checking
+probabilities are valid.
+"""
 
 import jax.numpy as jnp
 import pytest

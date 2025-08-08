@@ -14,8 +14,12 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import compute_corr_coef_bounds, dixon_coles_correlation_term
-from bpl.base import BaseMatchPredictor
+from bpl._util import (
+    compute_corr_coef_bounds,
+    dixon_coles_correlation_term,
+    parse_teams,
+)
+from bpl.base import DTYPES, BaseMatchPredictor
 
 __all__ = ["ExtendedDixonColesMatchPredictor"]
 
@@ -40,11 +44,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
     # pylint: disable=duplicate-code
     def __init__(self):
+        super().__init__()
         # attributes get populated when self.fit() is called
-
-        # list of all unique team names
-        # used to create integer indicator for each team
-        self.teams = None
 
         # MCMC samples for each model parameter
         # attack/defence/home_advantage have shape [number of samples, number of teams]
@@ -218,7 +219,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         # lastly, apply correction for low score matches (tau in Dixon & Coles paper,
         # corr_coeff=rho)
-        # ensure the correlation coefficient is within the expected range set out in the Dixon and Coles paper
+        # ensure the correlation coefficient is within the expected range set out in
+        # the Dixon and Coles paper
         corr_coef_raw = numpyro.sample(
             "corr_coef_raw", dist.Beta(concentration1=2.0, concentration0=2.0)
         )
@@ -251,13 +253,10 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         Fit model to data.
         """
         # prepare data
-        home_team = training_data["home_team"]
-        away_team = training_data["away_team"]
+        self.teams, self._teams_dict, home_ind, away_ind = parse_teams(
+            training_data["home_team"], training_data["away_team"], DTYPES["teams"]
+        )
         team_covariates = training_data.get("team_covariates", None)
-
-        self.teams = sorted(list(set(home_team) | set(away_team)))
-        home_ind = jnp.array([self.teams.index(t) for t in home_team])
-        away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
         self.epsilon = epsilon
         self.time_diff = training_data.get("time_diff", None)
@@ -335,9 +334,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             Iterable[float], Iterable[float]: expected goals for (home, away) team(s)
             for each match.
         """
-
-        home_ind = jnp.array([self.teams.index(t) for t in home_team])
-        away_ind = jnp.array([self.teams.index(t) for t in away_team])
+        home_ind, away_ind = self._parse_fixture_args(home_team, away_team)
 
         attack_home, defence_home = self.attack[:, home_ind], self.defence[:, home_ind]
         attack_away, defence_away = self.attack[:, away_ind], self.defence[:, away_ind]
@@ -370,9 +367,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         Returns:
             float: the probability of the given outcome.
         """
-
-        home_team = [home_team] if isinstance(home_team, str) else home_team
-        away_team = [away_team] if isinstance(away_team, str) else away_team
+        home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(
             home_team, away_team
@@ -441,7 +436,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         attack = mean_attack + log_a_tilde * self.std_attack
         defence = mean_defence + log_b_tilde * self.std_defence
 
-        self.teams.append(team_name)
+        self.teams = np.append(self.teams, team_name)
+        self._teams_dict[team_name] = len(self._teams_dict)
         self.attack = jnp.concatenate((self.attack, attack[:, None]), axis=1)
         self.defence = jnp.concatenate((self.defence, defence[:, None]), axis=1)
         self.home_advantage = jnp.concatenate(

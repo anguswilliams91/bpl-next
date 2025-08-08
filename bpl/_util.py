@@ -110,3 +110,26 @@ def map_choice(key, a, num_samples, p):
 
     new_keys = jax.random.split(key, p.shape[0])
     return jax.vmap(_map_choice_once)((p, new_keys))
+
+
+def parse_teams(
+    home_team: Iterable[str], away_team: Iterable[str], dtype: str
+) -> Tuple[np.ndarray, dict, jnp.ndarray, jnp.ndarray]:
+    """Parse home and away teams for a number of fixtures to extract unique names,
+    a mapping between team names and indices, and the corresponding indices for each
+    fixture.
+
+    Args:
+        home_team: Home team for each fixture
+        away_team: Away team for each fixture
+        dtype (str): Data type to use for team indices
+
+    Returns:
+        Unique team names, mapping from team names to indices, home team index for each
+            fixture, away team index for each fixture
+    """
+    teams = np.array(sorted(set(home_team) | set(away_team)))
+    teams_dict = {t: i for i, t in enumerate(teams)}
+    home_ind = jnp.array([teams_dict[t] for t in home_team], dtype)
+    away_ind = jnp.array([teams_dict[t] for t in away_team], dtype)
+    return teams, teams_dict, home_ind, away_ind
