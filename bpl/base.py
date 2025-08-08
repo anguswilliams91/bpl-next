@@ -1,4 +1,5 @@
 """Implementation of the probabilistic model for soccer matches."""
+
 from __future__ import annotations
 
 from abc import abstractmethod

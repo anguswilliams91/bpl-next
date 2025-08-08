@@ -1,4 +1,5 @@
 """Private utility functions."""
+
 from typing import Iterable, Optional, Tuple, Union
 
 import jax

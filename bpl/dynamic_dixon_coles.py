@@ -1,4 +1,5 @@
 """Implementation of the neutral model with dynamic parameters in the current version of bpl."""
+
 from __future__ import annotations
 
 import warnings

@@ -6,6 +6,7 @@ from bpl.neutral_dixon_coles_WC import NeutralDixonColesMatchPredictorWC
 
 TOL = 5e-02
 
+
 @pytest.fixture
 def model(neutral_dummy_data):
     return NeutralDixonColesMatchPredictorWC().fit(neutral_dummy_data)
@@ -97,7 +98,9 @@ def test_predict_concede_n_proba(model):
     assert len(proba_team_concede) == 1
     assert (proba_team_concede[0] >= 0) and (proba_team_concede[0] <= 1)
 
-    proba_opponent_score = model.predict_score_n_proba(1, "1", "0", "0", "1", home=False)
+    proba_opponent_score = model.predict_score_n_proba(
+        1, "1", "0", "0", "1", home=False
+    )
     assert proba_team_concede.tolist() == pytest.approx(
         proba_opponent_score.tolist(), abs=TOL
     )

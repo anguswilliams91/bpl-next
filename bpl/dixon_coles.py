@@ -1,4 +1,5 @@
 """Implementation of a simple team level model."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Optional, Tuple, Union

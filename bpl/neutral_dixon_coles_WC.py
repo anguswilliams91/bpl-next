@@ -1,4 +1,5 @@
 """Implementation of the neutral model for predicting the World Cup."""
+
 from __future__ import annotations
 
 import warnings
