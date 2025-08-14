@@ -71,6 +71,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         # optional time weighting parameter
         self.epsilon = None
         self.time_diff = None
+        self.rescale_weights = None
 
     # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
@@ -83,6 +84,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         team_covariates: Optional[np.array],
         time_diff: Optional[Iterable[float]],
         epsilon: Optional[float],
+        rescale_weights: Optional[bool] = False,
     ):
         """
         NumPyro model definition.
@@ -100,6 +102,10 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             epsilon Optional[float]: optional exponential time decay parameter.
             time_diff Optional[Iterable[float]]: optional number of weeks between
             current game week and match week (must be provided if epsilon is provided).
+            rescale_weights Optional[bool]: If True, and epsilon and time_diff are
+            provided, rescale the weights so they sum to the total number of
+            matches. Final weights will be: num_matches * exp(-epsilon * time_diff)
+            / sum(exp(-epsilon * time_diff))
         """
         # default prior parameters for attack/defence/home_advantage
         mean_attack = 0
@@ -195,8 +201,11 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         # heavily)
         if epsilon is not None:
             weights = jnp.exp(-epsilon * time_diff)
-            with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(
-                scale=weights
+            if rescale_weights:
+                weights = time_diff.shape[0] * weights / weights.sum()
+            with (
+                numpyro.plate("data", len(home_goals)),
+                numpyro.handlers.scale(scale=weights),
             ):
                 numpyro.sample(
                     "home_goals", dist.Poisson(expected_home_goals), obs=home_goals
@@ -246,6 +255,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         num_warmup: int = 500,
         num_samples: int = 1000,
         epsilon: Optional[float] = None,
+        rescale_weights: Optional[bool] = False,
         mcmc_kwargs: Optional[Dict[str, Any]] = None,
         run_kwargs: Optional[Dict[str, Any]] = None,
     ) -> ExtendedDixonColesMatchPredictor:
@@ -260,6 +270,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         self.epsilon = epsilon
         self.time_diff = training_data.get("time_diff", None)
+        self.rescale_weights = rescale_weights
         if epsilon is not None:
             if self.time_diff is None:
                 raise ValueError(
@@ -300,6 +311,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             team_covariates=team_covariates,
             time_diff=self.time_diff,
             epsilon=self.epsilon,
+            rescale_weights=self.rescale_weights,
             **(run_kwargs or {}),
         )
 
