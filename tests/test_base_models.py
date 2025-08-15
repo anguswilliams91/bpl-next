@@ -6,8 +6,8 @@ probabilities are valid.
 import jax.numpy as jnp
 import pytest
 
-from bpl import DixonColesMatchPredictor, ExtendedDixonColesMatchPredictor
-from bpl.base import MAX_GOALS
+from bpl_next import DixonColesMatchPredictor, ExtendedDixonColesMatchPredictor
+from bpl_next.base import MAX_GOALS
 
 MODELS = [DixonColesMatchPredictor, ExtendedDixonColesMatchPredictor]
 

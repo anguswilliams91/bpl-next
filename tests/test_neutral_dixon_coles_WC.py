@@ -1,8 +1,8 @@
 import jax.numpy as jnp
 import pytest
 
-from bpl.base import MAX_GOALS
-from bpl.neutral_dixon_coles_WC import NeutralDixonColesMatchPredictorWC
+from bpl_next.base import MAX_GOALS
+from bpl_next.neutral_dixon_coles_WC import NeutralDixonColesMatchPredictorWC
 
 TOL = 5e-02
 

@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from bpl._util import map_choice, str_to_list
+from bpl_next._util import map_choice, str_to_list
 
 MAX_GOALS = 15
 DTYPES = {

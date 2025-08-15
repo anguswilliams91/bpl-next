@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import pytest
 
-from bpl.dixon_coles import DixonColesMatchPredictor
+from bpl_next.dixon_coles import DixonColesMatchPredictor
 
 
 def test_fit(dummy_data):

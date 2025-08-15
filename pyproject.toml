@@ -1,24 +1,24 @@
-[tool.poetry]
-name = "bpl"
-version = "0.3.0"
-description = ""
-authors = ["Angus Williams <anguswilliams91@gmail.com>"]
-
-[tool.poetry.dependencies]
-python = "^3.9"
-numpyro = "^0.13.2"
-scipy = "^1.12.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.1"
-black = "^24.2.0"
-isort = "^5.13.2"
-pytest-cov = "^4.1.0"
-pylint = "^3.0.4"
-
-[tool.isort]
-profile = "black"
-
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires= ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bpl-next"
+version = "0.4.0"
+description = "Bayesian models for football match prediction, based on Dixon and Coles (1997)."
+authors = [{name = "Angus Williams", email = "anguswilliams91@gmail.com"}]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpyro>=0.13.2",
+  "scipy>=1.12.0",
+  "pytest>=8.0.1",
+  "black>=24.2.0",
+  "isort>=5.13.2",
+  "pytest-cov>=4.1.0",
+  "pylint>=3.0.4"
+]
+
+[tool.hatch.build]
+packages = ["bpl_next"]

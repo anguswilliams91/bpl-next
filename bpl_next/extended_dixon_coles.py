@@ -14,12 +14,12 @@ from numpyro.handlers import reparam
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.reparam import LocScaleReparam
 
-from bpl._util import (
+from bpl_next._util import (
     compute_corr_coef_bounds,
     dixon_coles_correlation_term,
     parse_teams,
 )
-from bpl.base import DTYPES, BaseMatchPredictor
+from bpl_next.base import DTYPES, BaseMatchPredictor
 
 __all__ = ["ExtendedDixonColesMatchPredictor"]
 

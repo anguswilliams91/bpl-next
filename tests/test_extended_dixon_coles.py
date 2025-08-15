@@ -1,4 +1,4 @@
-from bpl.extended_dixon_coles import ExtendedDixonColesMatchPredictor
+from bpl_next.extended_dixon_coles import ExtendedDixonColesMatchPredictor
 
 
 def test_time_weighted_vs_not(timed_dummy_data):
