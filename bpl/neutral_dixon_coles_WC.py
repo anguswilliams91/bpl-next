@@ -54,6 +54,7 @@ class NeutralDixonColesMatchPredictorWC:
         self.away_defence = None
         self.time_diff = None
         self.epsilon = None
+        self.rescale_weights = None
         self.game_weights = None
         self.corr_coef = None
         self.u = None
@@ -93,6 +94,7 @@ class NeutralDixonColesMatchPredictorWC:
         epsilon: float,
         game_weights: Iterable[float],
         team_covariates: Optional[np.array] = None,
+        rescale_weights: Optional[bool] = False,
     ):
         mean_attack = 0.0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
@@ -201,6 +203,8 @@ class NeutralDixonColesMatchPredictorWC:
         )
 
         weights = jnp.exp(-epsilon * time_diff) * game_weights
+        if rescale_weights:
+            weights = len(home_goals) * weights / weights.sum()
         with numpyro.plate("data", len(home_goals)), numpyro.handlers.scale(
             scale=weights
         ):
@@ -232,6 +236,7 @@ class NeutralDixonColesMatchPredictorWC:
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
         epsilon: float = 0.0,
+        rescale_weights: Optional[bool] = False,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
@@ -260,6 +265,7 @@ class NeutralDixonColesMatchPredictorWC:
         )
 
         self.epsilon = epsilon
+        self.rescale_weights = rescale_weights
         self.time_diff = training_data["time_diff"]
         self.game_weights = training_data["game_weights"]
 
@@ -295,6 +301,7 @@ class NeutralDixonColesMatchPredictorWC:
             epsilon,
             self.game_weights,
             team_covariates=team_covariates,
+            rescale_weights=self.rescale_weights,
             **(run_kwargs or {}),
         )
 

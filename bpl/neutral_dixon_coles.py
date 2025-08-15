@@ -70,6 +70,7 @@ class NeutralDixonColesMatchPredictor:
         self.away_defence = None
         self.time_diff = None
         self.epsilon = None
+        self.rescale_weights = None
         self.game_weights = None
         self.corr_coef = None
         self.u = None
@@ -109,6 +110,7 @@ class NeutralDixonColesMatchPredictor:
         epsilon: Optional[float],
         game_weights: Optional[Iterable[float]],
         team_covariates: Optional[np.array] = None,
+        rescale_weights: Optional[bool] = False,
     ):
         """
         NumPyro model definition.
@@ -125,6 +127,10 @@ class NeutralDixonColesMatchPredictor:
             game_weights Optional[Iterable[float]]: weights for each game.
             team_covariates Optional[np.array]: optional team covariates
                 [num_teams, num_covariates].
+            rescale_weights Optional[bool]: If True, and epsilon and time_diff are
+                provided, rescale the weights so they sum to the total number of
+                matches. Final weights will be: num_matches * exp(-epsilon * time_diff)
+                / sum(exp(-epsilon * time_diff))
         """
         # default prior parameters for attack/defence/home_advantage
         mean_attack = 0.0
@@ -245,6 +251,8 @@ class NeutralDixonColesMatchPredictor:
         weights = jnp.ones(len(home_goals))
         if epsilon is not None:
             weights = weights * jnp.exp(-epsilon * time_diff)
+            if rescale_weights:
+                weights = len(home_goals) * weights / weights.sum()
         if weights is not None:
             weights = weights * game_weights
 
@@ -279,6 +287,7 @@ class NeutralDixonColesMatchPredictor:
         self,
         training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
         epsilon: Optional[float] = None,
+        rescale_weights: Optional[bool] = False,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
@@ -295,6 +304,7 @@ class NeutralDixonColesMatchPredictor:
         team_covariates = training_data.get("team_covariates")
 
         self.epsilon = epsilon
+        self.rescale_weights = rescale_weights
         self.time_diff = training_data.get("time_diff", None)
         if epsilon is not None:
             if self.time_diff is None:
@@ -339,6 +349,7 @@ class NeutralDixonColesMatchPredictor:
             self.epsilon,
             self.game_weights,
             team_covariates=team_covariates,
+            rescale_weights=self.rescale_weights,
             **(run_kwargs or {}),
         )
 
