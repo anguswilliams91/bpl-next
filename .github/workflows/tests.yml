@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Dependencies
-        run: python -m pip install --group dev
+        run: python -m pip install --group dev .
 
       # FIXME: pylint set to fail under 9.5 only to temporarily work around warnings
       - name: Code Quality
