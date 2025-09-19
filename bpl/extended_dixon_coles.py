@@ -74,15 +74,15 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
     @staticmethod
     def _model(
-        home_team: jnp.array,
-        away_team: jnp.array,
+        home_team: jnp.ndarray,
+        away_team: jnp.ndarray,
         num_teams: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
         team_covariates: np.array | None,
         time_diff: Iterable[float] | None,
         epsilon: float | None,
-        rescale_weights: bool | None = False,
+        rescale_weights: bool | None = True,
     ):
         """
         NumPyro model definition.
@@ -252,7 +252,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         num_warmup: int = 500,
         num_samples: int = 1000,
         epsilon: float | None = None,
-        rescale_weights: bool | None = False,
+        rescale_weights: bool | None = True,
         mcmc_kwargs: dict[str, Any] | None = None,
         run_kwargs: dict[str, Any] | None = None,
     ) -> ExtendedDixonColesMatchPredictor:

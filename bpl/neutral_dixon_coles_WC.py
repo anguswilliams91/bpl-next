@@ -79,11 +79,11 @@ class NeutralDixonColesMatchPredictorWC:
 
     @staticmethod
     def _model(
-        home_team: jnp.array,
-        away_team: jnp.array,
+        home_team: jnp.ndarray,
+        away_team: jnp.ndarray,
         num_teams: int,
-        home_conf: jnp.array,
-        away_conf: jnp.array,
+        home_conf: jnp.ndarray,
+        away_conf: jnp.ndarray,
         num_conferences: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
@@ -92,7 +92,7 @@ class NeutralDixonColesMatchPredictorWC:
         epsilon: float,
         game_weights: Iterable[float],
         team_covariates: np.array | None = None,
-        rescale_weights: bool | None = False,
+        rescale_weights: bool | None = True,
     ):
         mean_attack = 0.0
         mean_defence = numpyro.sample("mean_defence", dist.Normal(loc=0.0, scale=1.0))
@@ -234,7 +234,7 @@ class NeutralDixonColesMatchPredictorWC:
         self,
         training_data: dict[str, Iterable[str] | Iterable[float]],
         epsilon: float = 0.0,
-        rescale_weights: bool | None = False,
+        rescale_weights: bool | None = True,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,

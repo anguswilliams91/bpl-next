@@ -15,7 +15,7 @@ def str_to_list(*args):
 
 
 def compute_corr_coef_bounds(
-    expected_home_goals: jnp.array, expected_away_goals: jnp.array
+    expected_home_goals: jnp.ndarray, expected_away_goals: jnp.ndarray
 ) -> tuple[float, float]:
     """
     Computes the bounds of the correlation coefficient from dixon and coles paper
@@ -34,10 +34,10 @@ def compute_corr_coef_bounds(
 def dixon_coles_correlation_term(
     home_goals: int | Iterable[int],
     away_goals: int | Iterable[int],
-    home_rate: jnp.array,
-    away_rate: jnp.array,
-    corr_coef: jnp.array,
-    weights: jnp.array | None = None,
+    home_rate: jnp.ndarray,
+    away_rate: jnp.ndarray,
+    corr_coef: jnp.ndarray,
+    weights: jnp.ndarray | None = None,
     tol: float | None = 0,  # workaround to clip negative values to tol to avoid NaNs
 ) -> jnp.array:
     """

@@ -98,8 +98,8 @@ class NeutralDixonColesMatchPredictor:
 
     @staticmethod
     def _model(
-        home_team: jnp.array,
-        away_team: jnp.array,
+        home_team: jnp.ndarray,
+        away_team: jnp.ndarray,
         num_teams: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
@@ -108,7 +108,7 @@ class NeutralDixonColesMatchPredictor:
         epsilon: float | None,
         game_weights: Iterable[float] | None,
         team_covariates: np.array | None = None,
-        rescale_weights: bool | None = False,
+        rescale_weights: bool | None = True,
     ):
         """
         NumPyro model definition.
@@ -285,7 +285,7 @@ class NeutralDixonColesMatchPredictor:
         self,
         training_data: dict[str, Iterable[str] | Iterable[float]],
         epsilon: float | None = None,
-        rescale_weights: bool | None = False,
+        rescale_weights: bool | None = True,
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,

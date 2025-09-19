@@ -30,16 +30,20 @@ def test_epsilon(timed_dummy_data):
     Test that the fitted model parameters respond as expected to vaying the epsilon
     value.
     """
-    model_epsilon1 = ExtendedDixonColesMatchPredictor().fit(timed_dummy_data, epsilon=1)
+    model_epsilon1 = ExtendedDixonColesMatchPredictor().fit(
+        timed_dummy_data, epsilon=1, rescale_weights=True
+    )
     attack_epsilon1 = model_epsilon1.attack.mean(axis=0)
     delta_attack_1 = abs(attack_epsilon1[1] - attack_epsilon1[0])
-    defence_epsilon1 = model_epsilon1.attack.mean(axis=0)
+    defence_epsilon1 = model_epsilon1.defence.mean(axis=0)
     delta_defence_1 = abs(defence_epsilon1[1] - defence_epsilon1[0])
 
-    model_epsilon2 = ExtendedDixonColesMatchPredictor().fit(timed_dummy_data, epsilon=2)
+    model_epsilon2 = ExtendedDixonColesMatchPredictor().fit(
+        timed_dummy_data, epsilon=2, rescale_weights=True
+    )
     attack_epsilon2 = model_epsilon2.attack.mean(axis=0)
     delta_attack_2 = abs(attack_epsilon2[1] - attack_epsilon2[0])
-    defence_epsilon2 = model_epsilon2.attack.mean(axis=0)
+    defence_epsilon2 = model_epsilon2.defence.mean(axis=0)
     delta_defence_2 = abs(defence_epsilon2[1] - defence_epsilon2[0])
 
     # increasing epsilon should increase the impact of time weighting

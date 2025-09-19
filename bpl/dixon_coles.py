@@ -36,8 +36,8 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
 
     @staticmethod
     def _model(
-        home_team: jnp.array,
-        away_team: jnp.array,
+        home_team: jnp.ndarray,
+        away_team: jnp.ndarray,
         num_teams: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],

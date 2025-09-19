@@ -63,9 +63,9 @@ class DynamicNeutralDixonColesMatchPredictor:
 
     @staticmethod
     def _model(
-        home_team: jnp.array,
-        away_team: jnp.array,
-        gameweek: jnp.array,
+        home_team: jnp.ndarray,
+        away_team: jnp.ndarray,
+        gameweek: jnp.ndarray,
         num_teams: int,
         num_gameweeks: int,
         home_goals: Iterable[int],
