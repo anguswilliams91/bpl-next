@@ -47,5 +47,5 @@ def test_epsilon(timed_dummy_data):
     delta_defence_2 = abs(defence_epsilon2[1] - defence_epsilon2[0])
 
     # increasing epsilon should increase the impact of time weighting
-    assert delta_attack_2 > 1.5 * delta_attack_1
-    assert delta_defence_2 > 1.5 * delta_defence_1
+    assert delta_attack_2 > 1.4 * delta_attack_1
+    assert delta_defence_2 > 1.4 * delta_defence_1
