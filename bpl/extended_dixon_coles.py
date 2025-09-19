@@ -192,8 +192,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         expected_away_goals = jnp.exp(attack[away_team] - defence[home_team])
 
         # FIXME: this is because the priors allow crazy simulated data before inference
-        expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
-        expected_away_goals = jnp.clip(expected_away_goals, a_max=15.0)
+        expected_home_goals = jnp.clip(expected_home_goals, max=15.0)
+        expected_away_goals = jnp.clip(expected_away_goals, max=15.0)
 
         # likelihood (with optional decaying weights i.e., weigh recent data more
         # heavily)

@@ -63,7 +63,7 @@ def dixon_coles_correlation_term(
                 - corr_coef[..., None]
                 * home_rate[..., nil_nil]
                 * away_rate[..., nil_nil],
-                a_min=tol,
+                min=tol,
             )
         )
     )
@@ -72,21 +72,20 @@ def dixon_coles_correlation_term(
     corr_term = corr_term.at[..., one_nil].set(
         weights[..., one_nil]
         * jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * away_rate[..., one_nil], a_min=tol)
+            jnp.clip(1.0 + corr_coef[..., None] * away_rate[..., one_nil], min=tol)
         )
     )
     nil_one = (home_goals == 0) & (away_goals == 1)
     corr_term = corr_term.at[..., nil_one].set(
         weights[..., nil_one]
         * jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], a_min=tol)
+            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], min=tol)
         ),
     )
 
     one_one = (home_goals == 1) & (away_goals == 1)
     return corr_term.at[..., one_one].set(
-        weights[..., one_one]
-        * jnp.log(jnp.clip(1.0 - corr_coef[..., None], a_min=tol)),
+        weights[..., one_one] * jnp.log(jnp.clip(1.0 - corr_coef[..., None], min=tol)),
     )
 
 
