@@ -3,8 +3,6 @@ Implementation of the neutral model with dynamic parameters in the current versi
 bpl.
 """
 
-from __future__ import annotations
-
 import warnings
 from collections.abc import Iterable
 from typing import Any
@@ -71,7 +69,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         home_goals: Iterable[int],
         away_goals: Iterable[int],
         neutral_venue: Iterable[int],
-        team_covariates: np.array | None,
+        team_covariates: np.ndarray | None,
     ):
         with numpyro.plate("gameweek", num_gameweeks):
             mean_home_attack = numpyro.sample("mean_home_attack", dist.Normal(0.1, 0.2))
@@ -256,7 +254,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         num_samples: int = 1000,
         mcmc_kwargs: dict[str, Any] | None = None,
         run_kwargs: dict[str, Any] | None = None,
-    ) -> DynamicNeutralDixonColesMatchPredictor:
+    ) -> "DynamicNeutralDixonColesMatchPredictor":
         """
         Fit the model.
         """
@@ -393,7 +391,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
 
-    def add_new_team(self, team_name: str, team_covariates: np.array | None = None):
+    def add_new_team(self, team_name: str, team_covariates: np.ndarray | None = None):
         if team_name in self.teams:
             msg = f"Team {team_name} already known to model."
             raise ValueError(msg)

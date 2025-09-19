@@ -1,7 +1,5 @@
 """Implementation of the model in the current version of bpl."""
 
-from __future__ import annotations
-
 import warnings
 from collections.abc import Iterable
 from typing import Any
@@ -79,7 +77,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         num_teams: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
-        team_covariates: np.array | None,
+        team_covariates: np.ndarray | None,
         time_diff: Iterable[float] | None,
         epsilon: float | None,
         rescale_weights: bool | None = True,
@@ -255,7 +253,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         rescale_weights: bool | None = True,
         mcmc_kwargs: dict[str, Any] | None = None,
         run_kwargs: dict[str, Any] | None = None,
-    ) -> ExtendedDixonColesMatchPredictor:
+    ) -> "ExtendedDixonColesMatchPredictor":
         """
         Fit model to data.
         """
@@ -395,7 +393,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         return sampled_probs.mean(axis=0)
 
     def add_new_team(
-        self, team_name: str, team_covariates: np.array | None = None
+        self, team_name: str, team_covariates: np.ndarray | None = None
     ) -> None:
         """
         Build defence/attack/home_advantage parameters for team not seen in the training

@@ -1,4 +1,3 @@
-
 from bpl.dixon_coles import DixonColesMatchPredictor
 
 

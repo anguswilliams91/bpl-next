@@ -1,7 +1,5 @@
 """Implementation of the probabilistic model for soccer matches."""
 
-from __future__ import annotations
-
 from abc import abstractmethod
 from collections.abc import Iterable
 from datetime import datetime
@@ -34,7 +32,7 @@ class BaseMatchPredictor:
     @abstractmethod
     def fit(
         self, training_data: dict[str, Iterable[str] | Iterable[float]], **kwargs
-    ) -> BaseMatchPredictor:
+    ) -> "BaseMatchPredictor":
         """Fit the model to data and return self."""
 
     @abstractmethod

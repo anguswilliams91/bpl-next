@@ -1,7 +1,5 @@
 """Implementation of the neutral model for predicting the World Cup."""
 
-from __future__ import annotations
-
 import warnings
 from collections.abc import Iterable
 from datetime import datetime
@@ -107,7 +105,7 @@ class NeutralDixonColesMatchPredictor:
         time_diff: Iterable[float] | None,
         epsilon: float | None,
         game_weights: Iterable[float] | None,
-        team_covariates: np.array | None = None,
+        team_covariates: np.ndarray | None = None,
         rescale_weights: bool | None = True,
     ):
         """
@@ -291,7 +289,7 @@ class NeutralDixonColesMatchPredictor:
         num_samples: int = 1000,
         mcmc_kwargs: dict[str, Any] | None = None,
         run_kwargs: dict[str, Any] | None = None,
-    ) -> NeutralDixonColesMatchPredictor:
+    ) -> "NeutralDixonColesMatchPredictor":
         """
         Fit model to data.
         """
@@ -484,7 +482,7 @@ class NeutralDixonColesMatchPredictor:
         sampled_probs = jnp.exp(corr_term + home_probs + away_probs)
         return sampled_probs.mean(axis=0)
 
-    def add_new_team(self, team_name: str, team_covariates: np.array | None = None):
+    def add_new_team(self, team_name: str, team_covariates: np.ndarray | None = None):
         """Method for adding another team to the model.
 
         Args:

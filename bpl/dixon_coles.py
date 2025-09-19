@@ -1,7 +1,5 @@
 """Implementation of a simple team level model."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from typing import Any
 
@@ -90,7 +88,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         num_samples: int = 1000,
         mcmc_kwargs: dict[str, Any] | None = None,
         run_kwargs: dict[str, Any] | None = None,
-    ) -> DixonColesMatchPredictor:
+    ) -> "DixonColesMatchPredictor":
         self.teams, self._teams_dict, home_ind, away_ind = parse_teams(
             training_data["home_team"], training_data["away_team"], DTYPES["teams"]
         )
