@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -26,7 +27,6 @@ __all__ = ["DixonColesMatchPredictor"]
 class DixonColesMatchPredictor(BaseMatchPredictor):
     """A Dixon-Coles like model for predicting match outcomes."""
 
-    # pylint: disable=duplicate-code
     def __init__(self):
         super().__init__()
         self.attack = None
@@ -34,7 +34,6 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         self.home_advantage = None
         self.corr_coef = None
 
-    # pylint: disable=too-many-locals,duplicate-code
     @staticmethod
     def _model(
         home_team: jnp.array,
@@ -48,17 +47,17 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(1.0))
 
-        with numpyro.plate("teams", num_teams):
-            with reparam(
+        with (
+            numpyro.plate("teams", num_teams),
+            reparam(
                 config={
                     "attack": LocScaleReparam(centered=0),
                     "defence": LocScaleReparam(centered=0),
                 }
-            ):
-                attack = numpyro.sample("attack", dist.Normal(0.0, std_attack))
-                defence = numpyro.sample(
-                    "defence", dist.Normal(mean_defence, std_defence)
-                )
+            ),
+        ):
+            attack = numpyro.sample("attack", dist.Normal(0.0, std_attack))
+            defence = numpyro.sample("defence", dist.Normal(mean_defence, std_defence))
 
         expected_home_goals = jnp.exp(
             attack[home_team] - defence[away_team] + home_advantage
@@ -83,15 +82,14 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
-        training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
+        training_data: dict[str, Iterable[str] | Iterable[float]],
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
-        mcmc_kwargs: Optional[Dict[str, Any]] = None,
-        run_kwargs: Optional[Dict[str, Any]] = None,
+        mcmc_kwargs: dict[str, Any] | None = None,
+        run_kwargs: dict[str, Any] | None = None,
     ) -> DixonColesMatchPredictor:
         self.teams, self._teams_dict, home_ind, away_ind = parse_teams(
             training_data["home_team"], training_data["away_team"], DTYPES["teams"]
@@ -124,8 +122,8 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         return self
 
     def _calculate_expected_goals(
-        self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
-    ) -> Tuple[jnp.array, jnp.array]:
+        self, home_team: str | Iterable[str], away_team: str | Iterable[str]
+    ) -> tuple[jnp.array, jnp.array]:
         home_ind, away_ind = self._parse_fixture_args(home_team, away_team)
 
         attack_home, defence_home = self.attack[:, home_ind], self.defence[:, home_ind]
@@ -138,10 +136,10 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
 
     def predict_score_proba(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        home_goals: Union[int, Iterable[int]],
-        away_goals: Union[int, Iterable[int]],
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        home_goals: int | Iterable[int],
+        away_goals: int | Iterable[int],
     ) -> jnp.array:
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
