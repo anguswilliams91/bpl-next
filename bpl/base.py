@@ -200,7 +200,7 @@ class BaseMatchPredictor:
         num_samples: int = 1,
         random_state: int | None = None,
         max_goals: int | None = MAX_GOALS,
-    ) -> jnp.ndarray:
+    ) -> np.ndarray:
         """Sample outcome of match between two teams.
 
         Args:
@@ -212,7 +212,7 @@ class BaseMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            jnp.ndarray: Array of strings representing the winning team or 'Draw'
+            np.ndarray: Array of strings representing the winning team or 'Draw'
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
@@ -230,7 +230,7 @@ class BaseMatchPredictor:
             probs,
         )
 
-        winner = jnp.empty((len(home_team), num_samples), dtype=DTYPES["teams"])
+        winner = np.empty((len(home_team), num_samples), dtype=DTYPES["teams"])
         home_team_rep = home_team.repeat(num_samples).reshape(
             (len(home_team), num_samples)
         )

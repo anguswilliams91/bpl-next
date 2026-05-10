@@ -1,6 +1,8 @@
-__version__ = "0.2.0"
+from importlib.metadata import version
 
 from bpl.dixon_coles import DixonColesMatchPredictor
 from bpl.extended_dixon_coles import ExtendedDixonColesMatchPredictor
 from bpl.neutral_dixon_coles import NeutralDixonColesMatchPredictor
 from bpl.neutral_dixon_coles_WC import NeutralDixonColesMatchPredictorWC
+
+__version__ = version(__name__)
