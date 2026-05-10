@@ -249,7 +249,7 @@ class NeutralDixonColesMatchPredictor:
             weights = weights * jnp.exp(-epsilon * time_diff)
             if rescale_weights:
                 weights = len(home_goals) * weights / weights.sum()
-        if weights is not None:
+        if game_weights is not None:
             weights = weights * game_weights
 
         with (
