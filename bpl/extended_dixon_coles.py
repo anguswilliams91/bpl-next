@@ -93,12 +93,12 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
             match.
             away_goals Iterable[int]: number of goals scored by the away team in each
             match.
-            team_covariates Optional[np.ndarray]: optional team covariates
+            team_covariates np.ndarray | None: optional team covariates
             [num_teams, num_covariates].
-            epsilon Optional[float]: optional exponential time decay parameter.
-            time_diff Optional[Iterable[float]]: optional number of weeks between
+            epsilon float | None: optional exponential time decay parameter.
+            time_diff Iterable[float] | None: optional number of weeks between
             current game week and match week (must be provided if epsilon is provided).
-            rescale_weights Optional[bool]: If True, and epsilon and time_diff are
+            rescale_weights bool | None: If True, and epsilon and time_diff are
             provided, rescale the weights so they sum to the total number of
             matches. Final weights will be: num_matches * exp(-epsilon * time_diff)
             / sum(exp(-epsilon * time_diff))
@@ -333,8 +333,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         Calculate expected goals for home and away team(s) by match.
 
         Args:
-            home_team Union[str, Iterable[str]]: name of home team(s) for each match.
-            away_team Union[str, Iterable[str]]: name of away team(s) for each  match.
+            home_team str | Iterable[str]]: name of home team(s) for each match.
+            away_team str | Iterable[str]]: name of away team(s) for each  match.
 
         Returns:
             Iterable[float], Iterable[float]: expected goals for (home, away) team(s)
@@ -363,11 +363,11 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         Return the probability of a particular scoreline.
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            home_goals (Union[int, Iterable[int]]): number of goals scored by
+            home_team (str | Iterable[str]]): name of the home team(s).
+            away_team (str | Iterable[str]]): name of the away team(s).
+            home_goals (int | Iterable[int]]): number of goals scored by
                 the home team(s).
-            away_goals (Union[int, Iterable[int]]): number of goals scored by
+            away_goals (int | Iterable[int]]): number of goals scored by
                 the away team(s).
 
         Returns:
@@ -401,7 +401,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         Args:
             team_name str: name of new team.
-            team_covariates Optional[np.array]: optional team covariates
+            team_covariates np.ndarray | None: optional team covariates
             [num_teams, num_covariates].
         """
         if team_name in self.teams:
