@@ -298,11 +298,6 @@ class DynamicNeutralDixonColesMatchPredictor:
         )
 
         samples = mcmc.get_samples()
-        print(samples["attack_0"].shape)
-        print(samples["attack_1"].shape)
-        print(samples[f"attack_{num_gameweeks - 1}"].shape)
-        print([samples[f"attack_{j}"].shape for j in range(num_gameweeks)])
-        print([samples[f"defence_{j}"].shape for j in range(num_gameweeks)])
         self.attack = [samples[f"attack_{j}"] for j in range(num_gameweeks)]
         self.defence = [samples[f"defence_{j}"] for j in range(num_gameweeks)]
         self.home_attack = samples["home_attack"]
