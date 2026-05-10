@@ -333,8 +333,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         Calculate expected goals for home and away team(s) by match.
 
         Args:
-            home_team str | Iterable[str]]: name of home team(s) for each match.
-            away_team str | Iterable[str]]: name of away team(s) for each  match.
+            home_team str | Iterable[str]: name of home team(s) for each match.
+            away_team str | Iterable[str]: name of away team(s) for each  match.
 
         Returns:
             Iterable[float], Iterable[float]: expected goals for (home, away) team(s)
@@ -363,11 +363,11 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         Return the probability of a particular scoreline.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_goals (int | Iterable[int]]): number of goals scored by
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_goals (int | Iterable[int]): number of goals scored by
                 the home team(s).
-            away_goals (int | Iterable[int]]): number of goals scored by
+            away_goals (int | Iterable[int]): number of goals scored by
                 the away team(s).
 
         Returns:

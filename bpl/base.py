@@ -46,11 +46,11 @@ class BaseMatchPredictor:
         """Return the probability of a particular scoreline.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_goals (int | Iterable[int]]): number of goals scored by
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_goals (int | Iterable[int]): number of goals scored by
                 the home team(s).
-            away_goals (int | Iterable[int]]): number of goals scored by
+            away_goals (int | Iterable[int]): number of goals scored by
                 the away team(s).
 
         Returns:
@@ -78,8 +78,8 @@ class BaseMatchPredictor:
         """Calculate scoreline probabilities between two teams.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
@@ -121,8 +121,8 @@ class BaseMatchPredictor:
         of the overall results (home win, away win, draw).
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
@@ -157,8 +157,8 @@ class BaseMatchPredictor:
         """Sample scoreline between two teams.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
             num_samples (int): number of simulations. Defaults to 1.
             random_state (int | None): seed. Defaults to None.
             max_goals (int | None): Compute scorelines where each team scores up to
@@ -204,8 +204,8 @@ class BaseMatchPredictor:
         """Sample outcome of match between two teams.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
             num_samples (int | None): number of simulations. Defaults to 1.
             random_state (int | None): seed. Defaults to None.
             max_goals (int | None): Compute scorelines where each team scores up to
@@ -258,9 +258,9 @@ class BaseMatchPredictor:
         score n goals against this opponent.
 
         Args:
-            n (int | Iterable[int]]): number of goals scored.
-            team (str | Iterable[str]]): name of the team scoring the goals.
-            opponent (str | Iterable[str]]): name of the opponent.
+            n (int | Iterable[int]): number of goals scored.
+            team (str | Iterable[str]): name of the team scoring the goals.
+            opponent (str | Iterable[str]): name of the opponent.
             home (bool | None): whether team is at home.
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
@@ -309,9 +309,9 @@ class BaseMatchPredictor:
         concede n goals against this opponent.
 
         Args:
-            n (int | Iterable[int]]): number of goals conceded.
-            team (str | Iterable[str]]): name of the team conceding the goals.
-            opponent (str | Iterable[str]]): name of the opponent.
+            n (int | Iterable[int]): number of goals conceded.
+            team (str | Iterable[str]): name of the team conceding the goals.
+            opponent (str | Iterable[str]): name of the opponent.
             home (bool | None): whether team is at home.
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.

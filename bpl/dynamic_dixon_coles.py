@@ -458,9 +458,9 @@ class DynamicNeutralDixonColesMatchPredictor:
         of the overall results (home win, away win, draw).
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0
 
         Returns:
@@ -505,12 +505,12 @@ class DynamicNeutralDixonColesMatchPredictor:
         score n goals against this opponent.
 
         Args:
-            n (int | Iterable[int]]): number of goals scored.
-            team (str | Iterable[str]]): name of the team scoring the goals.
-            opponent (str | Iterable[str]]): name of the opponent.
+            n (int | Iterable[int]): number of goals scored.
+            team (str | Iterable[str]): name of the team scoring the goals.
+            opponent (str | Iterable[str]): name of the opponent.
             home (bool | None): whether team is at home.
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
-             venue, else 0
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
+                venue, else 0
 
         Returns:
             jnp.ndarray: Probability that team scores n goals against opponent.
@@ -551,11 +551,11 @@ class DynamicNeutralDixonColesMatchPredictor:
         concede n goals against this opponent.
 
         Args:
-            n (int | Iterable[int]]): number of goals conceded.
-            team (str | Iterable[str]]): name of the team conceding the goals.
-            opponent (str | Iterable[str]]): name of the opponent.
+            n (int | Iterable[int]): number of goals conceded.
+            team (str | Iterable[str]): name of the team conceding the goals.
+            opponent (str | Iterable[str]): name of the opponent.
             home (bool | None): whether team is at home.
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0
 
         Returns:

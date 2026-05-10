@@ -369,11 +369,11 @@ class NeutralDixonColesMatchPredictorWC:
         the goals scored by home_team and away_team.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_conf (str | Iterable[str]]): conference of the home team(s).
-            away_conf (str | Iterable[str]]): conference of the away team(s).
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_conf (str | Iterable[str]): conference of the home team(s).
+            away_conf (str | Iterable[str]): conference of the away team(s).
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
 
         Returns:
@@ -431,15 +431,15 @@ class NeutralDixonColesMatchPredictorWC:
         """Compute probability of a particular scoreline between two teams.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_conf (str | Iterable[str]]): conference of the home team(s).
-            away_conf (str | Iterable[str]]): conference of the away team(s).
-            home_goals (int | Iterable[int]]): number of goals scored by the home
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_conf (str | Iterable[str]): conference of the home team(s).
+            away_conf (str | Iterable[str]): conference of the away team(s).
+            home_goals (int | Iterable[int]): number of goals scored by the home
                 team(s).
-            away_goals (int | Iterable[int]]): number of goals scored by the away
+            away_goals (int | Iterable[int]): number of goals scored by the away
                 team(s).
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
 
         Returns:
@@ -558,11 +558,11 @@ class NeutralDixonColesMatchPredictorWC:
         """Calculate scoreline probabilities between two teams.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_conf (str | Iterable[str]]): conference of the home team(s).
-            away_conf (str | Iterable[str]]): conference of the away team(s).
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_conf (str | Iterable[str]): conference of the home team(s).
+            away_conf (str | Iterable[str]): conference of the away team(s).
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
@@ -622,11 +622,11 @@ class NeutralDixonColesMatchPredictorWC:
         of the overall results (home win, away win, draw).
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_conf (str | Iterable[str]]): conference of the home team(s).
-            away_conf (str | Iterable[str]]): conference of the away team(s).
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_conf (str | Iterable[str]): conference of the home team(s).
+            away_conf (str | Iterable[str]): conference of the away team(s).
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
             knockout : If True only consider the probability of wins (exclude draws).
             max_goals (int | None): Compute scorelines where each team scores up to
@@ -684,11 +684,11 @@ class NeutralDixonColesMatchPredictorWC:
         """Sample scoreline between two teams.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_conf (str | Iterable[str]]): conference of the home team(s).
-            away_conf (str | Iterable[str]]): conference of the away team(s).
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_conf (str | Iterable[str]): conference of the home team(s).
+            away_conf (str | Iterable[str]): conference of the away team(s).
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
             num_samples (int): number of simulations. Defaults to 1.
             random_state (int | None): seed. Defaults to None.
@@ -750,11 +750,11 @@ class NeutralDixonColesMatchPredictorWC:
         """Sample outcome of match between two teams.
 
         Args:
-            home_team (str | Iterable[str]]): name of the home team(s).
-            away_team (str | Iterable[str]]): name of the away team(s).
-            home_conf (str | Iterable[str]]): conference of the home team(s).
-            away_conf (str | Iterable[str]]): conference of the away team(s).
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_conf (str | Iterable[str]): conference of the home team(s).
+            away_conf (str | Iterable[str]): conference of the away team(s).
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
             knockout : If True only consider the probability of wins (exclude draws).
             num_samples (int): number of simulations. Defaults to 1.
@@ -835,13 +835,13 @@ class NeutralDixonColesMatchPredictorWC:
         score n goals against this opponent.
 
         Args:
-            n (int | Iterable[int]]): number of goals scored.
-            team (str | Iterable[str]]): name of the team scoring the goals.
-            opponent (str | Iterable[str]]): name of the opponent.
-            team_conf (str | Iterable[str]]): conference of team scoring the goals.
-            opponent_conf (str | Iterable[str]]): conference of the opponent.
+            n (int | Iterable[int]): number of goals scored.
+            team (str | Iterable[str]): name of the team scoring the goals.
+            opponent (str | Iterable[str]): name of the opponent.
+            team_conf (str | Iterable[str]): conference of team scoring the goals.
+            opponent_conf (str | Iterable[str]): conference of the opponent.
             home (bool | None): whether team is at home.
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
@@ -910,14 +910,14 @@ class NeutralDixonColesMatchPredictorWC:
         concede n goals against this opponent.
 
         Args:
-            n (int | Iterable[int]]): number of goals conceded.
-            team (str | Iterable[str]]): name of the team conceding the goals.
-            opponent (str | Iterable[str]]): name of the opponent.
-            team_conf (str | Iterable[str]]): conference of team conceding the
+            n (int | Iterable[int]): number of goals conceded.
+            team (str | Iterable[str]): name of the team conceding the goals.
+            opponent (str | Iterable[str]): name of the opponent.
+            team_conf (str | Iterable[str]): conference of team conceding the
                 goals.
-            opponent_conf (str | Iterable[str]]): conference of the opponent.
+            opponent_conf (str | Iterable[str]): conference of the opponent.
             home (bool | None): whether team is at home.
-            neutral_venue (int | Iterable[int]]): 1 if game played at neutral
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
                 venue, else 0.
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
