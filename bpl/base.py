@@ -206,7 +206,7 @@ class BaseMatchPredictor:
         Args:
             home_team (str | Iterable[str]): name of the home team(s).
             away_team (str | Iterable[str]): name of the away team(s).
-            num_samples (int | None): number of simulations. Defaults to 1.
+            num_samples (int): number of simulations. Defaults to 1.
             random_state (int | None): seed. Defaults to None.
             max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
