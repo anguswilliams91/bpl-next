@@ -27,7 +27,7 @@ def test_time_weighted_vs_not(timed_dummy_data):
 
 def test_epsilon(timed_dummy_data):
     """
-    Test that the fitted model parameters respond as expected to vaying the epsilon
+    Test that the fitted model parameters respond as expected to varying the epsilon
     value.
     """
     model_epsilon1 = ExtendedDixonColesMatchPredictor().fit(
