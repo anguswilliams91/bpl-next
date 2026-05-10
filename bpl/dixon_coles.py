@@ -121,7 +121,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
 
     def _calculate_expected_goals(
         self, home_team: str | Iterable[str], away_team: str | Iterable[str]
-    ) -> tuple[jnp.array, jnp.array]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         home_ind, away_ind = self._parse_fixture_args(home_team, away_team)
 
         attack_home, defence_home = self.attack[:, home_ind], self.defence[:, home_ind]
@@ -138,7 +138,7 @@ class DixonColesMatchPredictor(BaseMatchPredictor):
         away_team: str | Iterable[str],
         home_goals: int | Iterable[int],
         away_goals: int | Iterable[int],
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
         expected_home_goals, expected_away_goals = self._calculate_expected_goals(

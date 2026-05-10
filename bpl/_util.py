@@ -39,7 +39,7 @@ def dixon_coles_correlation_term(
     corr_coef: jnp.ndarray,
     weights: jnp.ndarray | None = None,
     tol: float | None = 0,  # workaround to clip negative values to tol to avoid NaNs
-) -> jnp.array:
+) -> jnp.ndarray:
     """
     Calculate correlation term from dixon and coles paper
     """

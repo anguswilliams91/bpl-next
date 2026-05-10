@@ -86,14 +86,14 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         NumPyro model definition.
 
         Args:
-            home_team jnp.array: integer indicator of the home team for each match.
-            away_team jnp.array: integer indicator of the away team for each match.
+            home_team jnp.ndarray: integer indicator of the home team for each match.
+            away_team jnp.ndarray: integer indicator of the away team for each match.
             num_teams int: number of teams playing.
             home_goals Iterable[int]: number of goals scored by the home team in each
             match.
             away_goals Iterable[int]: number of goals scored by the away team in each
             match.
-            team_covariates Optional[np.array]: optional team covariates
+            team_covariates Optional[np.ndarray]: optional team covariates
             [num_teams, num_covariates].
             epsilon Optional[float]: optional exponential time decay parameter.
             time_diff Optional[Iterable[float]]: optional number of weeks between
@@ -328,7 +328,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
     def _calculate_expected_goals(
         self, home_team: str | Iterable[str], away_team: str | Iterable[str]
-    ) -> tuple[jnp.array, jnp.array]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """
         Calculate expected goals for home and away team(s) by match.
 
@@ -358,7 +358,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         away_team: str | Iterable[str],
         home_goals: int | Iterable[int],
         away_goals: int | Iterable[int],
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Return the probability of a particular scoreline.
 
@@ -371,7 +371,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                 the away team(s).
 
         Returns:
-            float: the probability of the given outcome.
+            jnp.ndarray: probability of the specified scoreline(s)
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 

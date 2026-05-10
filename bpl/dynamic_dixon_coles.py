@@ -336,7 +336,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         home_team: str | Iterable[str],
         away_team: str | Iterable[str],
         neutral_venue: int | Iterable[int],
-    ) -> tuple[jnp.array, jnp.array]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
         neutral_venue = jnp.array(neutral_venue)
@@ -366,7 +366,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         home_goals: int | Iterable[int],
         away_goals: int | Iterable[int],
         neutral_venue: int | Iterable[int],
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Predict probabilities for scorelines.
         """
@@ -451,7 +451,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         home_team: str | Iterable[str],
         away_team: str | Iterable[str],
         neutral_venue: int | Iterable[int],
-    ) -> dict[str, jnp.array]:
+    ) -> dict[str, jnp.ndarray]:
         """Calculate home win, away win and draw probabilities.
 
         Given a home team and away team (or lists thereof), calculate the probabilites
@@ -464,7 +464,7 @@ class DynamicNeutralDixonColesMatchPredictor:
                 venue, else 0
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
+            dict[str, Union[float, jnp.ndarray]]: A dictionary with keys "home_win",
                 "away_win" and "draw". Values are probabilities of each outcome.
         """
         home_team = [home_team] if isinstance(home_team, str) else home_team
@@ -498,7 +498,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         opponent: str | Iterable[str],
         home: bool | None = True,
         neutral_venue: int | None = 0,
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will score n goals.
         Given a team and an opponent, calculate the probability that the team will
@@ -513,7 +513,7 @@ class DynamicNeutralDixonColesMatchPredictor:
              venue, else 0
 
         Returns:
-            jnp.array: Probability that team scores n goals against opponent.
+            jnp.ndarray: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
 
@@ -544,7 +544,7 @@ class DynamicNeutralDixonColesMatchPredictor:
         opponent: str | Iterable[str],
         home: bool | None = True,
         neutral_venue: int | None = 0,
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will concede n goals.
         Given a team and an opponent, calculate the probability that the team will
@@ -559,7 +559,7 @@ class DynamicNeutralDixonColesMatchPredictor:
                 venue, else 0
 
         Returns:
-            jnp.array: Probability that team concedes n goals against opponent.
+            jnp.ndarray: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
 

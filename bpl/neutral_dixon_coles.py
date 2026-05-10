@@ -112,8 +112,8 @@ class NeutralDixonColesMatchPredictor:
         NumPyro model definition.
 
         Args:
-            home_team jnp.array: integer indicator of the home team for each match.
-            away_team jnp.array: integer indicator of the away team for each match.
+            home_team jnp.ndarray: integer indicator of the home team for each match.
+            away_team jnp.ndarray: integer indicator of the away team for each match.
             num_teams int: number of teams playing.
             home_goals Iterable[int]: goals scored by the home team in each match.
             away_goals Iterable[int]: goals scored by the away team in each match.
@@ -394,7 +394,7 @@ class NeutralDixonColesMatchPredictor:
         home_team: str | Iterable[str],
         away_team: str | Iterable[str],
         neutral_venue: int | Iterable[int],
-    ) -> tuple[jnp.array, jnp.array]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Computes the rate (mean) for the Poisson distribution to model
         the goals scored by home_team and away_team.
 
@@ -405,7 +405,7 @@ class NeutralDixonColesMatchPredictor:
                 venue, else 0.
 
         Returns:
-            Tuple[jnp.array, jnp.array]: Tuple of arrays for home and away rates.
+            tuple[jnp.ndarray, jnp.ndarray]: tuple of arrays for home and away rates.
         """
         (
             home_team,
@@ -443,7 +443,7 @@ class NeutralDixonColesMatchPredictor:
         home_goals: int | Iterable[int],
         away_goals: int | Iterable[int],
         neutral_venue: int | Iterable[int],
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """Compute probability of a particular scoreline between two teams.
 
         Args:
@@ -457,7 +457,7 @@ class NeutralDixonColesMatchPredictor:
                  venue, else 0.
 
         Returns:
-            jnp.array: Array of probabilities of each scoreline.
+            jnp.ndarray: Array of probabilities of each scoreline.
         """
         (
             home_team,
@@ -562,7 +562,7 @@ class NeutralDixonColesMatchPredictor:
         away_team: str | Iterable[str],
         neutral_venue: int | Iterable[int],
         max_goals: int | None = MAX_GOALS,
-    ) -> tuple[jnp.array, np.array, np.array]:
+    ) -> tuple[jnp.ndarray, np.ndarray, np.ndarray]:
         """Calculate scoreline probabilities between two teams.
 
         Args:
@@ -574,7 +574,7 @@ class NeutralDixonColesMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Tuple[jnp.array, np.array, np.array]: Tuple of the following grids (as
+            tuple[jnp.ndarray, np.ndarray, np.ndarray]: tuple of the following grids (as
                 arrays): probability of scorelines, home goals and away goals scored
                 grids
         """
@@ -612,7 +612,7 @@ class NeutralDixonColesMatchPredictor:
         neutral_venue: int | Iterable[int],
         knockout: bool = False,
         max_goals: int | None = MAX_GOALS,
-    ) -> dict[str, jnp.array]:
+    ) -> dict[str, jnp.ndarray]:
         """Calculate home win, away win and draw probabilities.
 
         Given a home team and away team (or lists thereof), calculate the probabilites
@@ -628,7 +628,7 @@ class NeutralDixonColesMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
+            dict[str, jnp.ndarray]: A dictionary with keys "home_win",
                 "draw" and "away_win". Values are probabilities of each outcome.
         """
         (
@@ -664,7 +664,7 @@ class NeutralDixonColesMatchPredictor:
         num_samples: int = 1,
         random_state: int | None = None,
         max_goals: int | None = MAX_GOALS,
-    ) -> dict[str, jnp.array]:
+    ) -> dict[str, jnp.ndarray]:
         """Sample scoreline between two teams.
 
         Args:
@@ -678,7 +678,7 @@ class NeutralDixonColesMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_score" and
+            dict[str, jnp.ndarray]: A dictionary with keys "home_score" and
                 "away_score". Values are the simulated goals scored in each simulation.
         """
         (
@@ -785,7 +785,7 @@ class NeutralDixonColesMatchPredictor:
         home: bool | None = True,
         neutral_venue: int | None = 0,
         max_goals: int | None = MAX_GOALS,
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will score n goals.
         Given a team and an opponent, calculate the probability that the team will
@@ -802,7 +802,7 @@ class NeutralDixonColesMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            jnp.array: Probability that team scores n goals against opponent.
+            jnp.ndarray: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
         (
@@ -846,7 +846,7 @@ class NeutralDixonColesMatchPredictor:
         home: bool | None = True,
         neutral_venue: int | None = 0,
         max_goals: int | None = MAX_GOALS,
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will concede n goals.
         Given a team and an opponent, calculate the probability that the team will
@@ -863,7 +863,7 @@ class NeutralDixonColesMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            jnp.array: Probability that team concedes n goals against opponent.
+            jnp.ndarray: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
         (

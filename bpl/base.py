@@ -42,7 +42,7 @@ class BaseMatchPredictor:
         away_team: str | Iterable[str],
         home_goals: int | Iterable[int],
         away_goals: int | Iterable[int],
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """Return the probability of a particular scoreline.
 
         Args:
@@ -74,7 +74,7 @@ class BaseMatchPredictor:
         home_team: str | Iterable[str],
         away_team: str | Iterable[str],
         max_goals: int | None = MAX_GOALS,
-    ) -> tuple[jnp.array, np.array, np.array]:
+    ) -> tuple[jnp.ndarray, np.ndarray, np.ndarray]:
         """Calculate scoreline probabilities between two teams.
 
         Args:
@@ -84,7 +84,7 @@ class BaseMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Tuple[jnp.array, np.array, np.array]: Tuple of the following grids (as
+            tuple[jnp.ndarray, np.ndarray, np.ndarray]: tuple of the following grids (as
                 arrays): probability of scorelines, home goals and away goals scored
                 grids
         """
@@ -114,7 +114,7 @@ class BaseMatchPredictor:
         home_team: str | Iterable[str],
         away_team: str | Iterable[str],
         max_goals: int | None = MAX_GOALS,
-    ) -> dict[str, jnp.array]:
+    ) -> dict[str, jnp.ndarray]:
         """Calculate home win, away win and draw probabilities.
 
         Given a home team and away team (or lists thereof), calculate the probabilites
@@ -127,7 +127,7 @@ class BaseMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
+            dict[str, Union[float, jnp.ndarray]]: A dictionary with keys "home_win",
                 "draw" and "away_win". Values are probabilities of each outcome.
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
@@ -153,7 +153,7 @@ class BaseMatchPredictor:
         num_samples: int = 1,
         random_state: int | None = None,
         max_goals: int | None = MAX_GOALS,
-    ) -> dict[str, jnp.array]:
+    ) -> dict[str, jnp.ndarray]:
         """Sample scoreline between two teams.
 
         Args:
@@ -165,7 +165,7 @@ class BaseMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_score" and
+            dict[str, Union[float, jnp.ndarray]]: A dictionary with keys "home_score" and
                 "away_score". Values are the simulated goals scored in each simulation.
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
@@ -200,7 +200,7 @@ class BaseMatchPredictor:
         num_samples: int = 1,
         random_state: int | None = None,
         max_goals: int | None = MAX_GOALS,
-    ) -> np.array:
+    ) -> jnp.ndarray:
         """Sample outcome of match between two teams.
 
         Args:
@@ -212,7 +212,7 @@ class BaseMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            np.array: Array of strings representing the winning team or 'Draw'
+            jnp.ndarray: Array of strings representing the winning team or 'Draw'
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
@@ -230,7 +230,7 @@ class BaseMatchPredictor:
             probs,
         )
 
-        winner = np.empty((len(home_team), num_samples), dtype=DTYPES["teams"])
+        winner = jnp.empty((len(home_team), num_samples), dtype=DTYPES["teams"])
         home_team_rep = home_team.repeat(num_samples).reshape(
             (len(home_team), num_samples)
         )
@@ -251,7 +251,7 @@ class BaseMatchPredictor:
         opponent: str | Iterable[str],
         home: bool | None = True,
         max_goals: int | None = MAX_GOALS,
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will score n goals.
         Given a team and an opponent, calculate the probability that the team will
@@ -266,7 +266,7 @@ class BaseMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            jnp.array: Probability that team scores n goals against opponent.
+            jnp.ndarray: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
         team, opponent = self._parse_fixture_args(team, opponent)
@@ -302,7 +302,7 @@ class BaseMatchPredictor:
         opponent: str | Iterable[str],
         home: bool | None = True,
         max_goals: int | None = MAX_GOALS,
-    ) -> jnp.array:
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will concede n goals.
         Given a team and an opponent, calculate the probability that the team will
@@ -317,7 +317,7 @@ class BaseMatchPredictor:
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            jnp.array: Probability that team concedes n goals against opponent.
+            jnp.ndarray: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
         team, opponent = self._parse_fixture_args(team, opponent)
