@@ -1,10 +1,8 @@
 """Implementation of the probabilistic model for soccer matches."""
 
-from __future__ import annotations
-
 from abc import abstractmethod
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Dict, Iterable, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -33,26 +31,26 @@ class BaseMatchPredictor:
 
     @abstractmethod
     def fit(
-        self, training_data: Dict[str, Union[Iterable[str], Iterable[float]]], **kwargs
-    ) -> BaseMatchPredictor:
+        self, training_data: dict[str, Iterable[str] | Iterable[float]], **kwargs
+    ) -> "BaseMatchPredictor":
         """Fit the model to data and return self."""
 
     @abstractmethod
     def predict_score_proba(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        home_goals: Union[int, Iterable[int]],
-        away_goals: Union[int, Iterable[int]],
-    ) -> jnp.array:
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        home_goals: int | Iterable[int],
+        away_goals: int | Iterable[int],
+    ) -> jnp.ndarray:
         """Return the probability of a particular scoreline.
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            home_goals (Union[int, Iterable[int]]): number of goals scored by
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_goals (int | Iterable[int]): number of goals scored by
                 the home team(s).
-            away_goals (Union[int, Iterable[int]]): number of goals scored by
+            away_goals (int | Iterable[int]): number of goals scored by
                 the away team(s).
 
         Returns:
@@ -73,21 +71,22 @@ class BaseMatchPredictor:
 
     def predict_score_grid_proba(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        max_goals: Optional[int] = MAX_GOALS,
-    ) -> Tuple[jnp.array, np.array, np.array]:
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        max_goals: int | None = MAX_GOALS,
+    ) -> tuple[jnp.ndarray, np.ndarray, np.ndarray]:
         """Calculate scoreline probabilities between two teams.
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            max_goals (Optional[int]): Compute scorelines where each team scores up to
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Tuple[jnp.array, np.array, np.array]: Tuple of the following grids (as arrays):
-                probability of scorelines, home goals and away goals scored grids
+            tuple[jnp.ndarray, np.ndarray, np.ndarray]: tuple of the following grids (as
+                arrays): probability of scorelines, home goals and away goals scored
+                grids
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
@@ -112,23 +111,23 @@ class BaseMatchPredictor:
 
     def predict_outcome_proba(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        max_goals: Optional[int] = MAX_GOALS,
-    ) -> Dict[str, jnp.array]:
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        max_goals: int | None = MAX_GOALS,
+    ) -> dict[str, jnp.ndarray]:
         """Calculate home win, away win and draw probabilities.
 
         Given a home team and away team (or lists thereof), calculate the probabilites
         of the overall results (home win, away win, draw).
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            max_goals (Optional[int]): Compute scorelines where each team scores up to
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
+            dict[str, float | jnp.ndarray]: A dictionary with keys "home_win",
                 "draw" and "away_win". Values are probabilities of each outcome.
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
@@ -149,24 +148,24 @@ class BaseMatchPredictor:
 
     def sample_score(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
         num_samples: int = 1,
-        random_state: int = None,
-        max_goals: Optional[int] = MAX_GOALS,
-    ) -> Dict[str, jnp.array]:
+        random_state: int | None = None,
+        max_goals: int | None = MAX_GOALS,
+    ) -> dict[str, jnp.ndarray]:
         """Sample scoreline between two teams.
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            num_samples (int, optional): number of simulations. Defaults to 1.
-            random_state (int, optional): seed. Defaults to None.
-            max_goals (Optional[int]): Compute scorelines where each team scores up to
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            num_samples (int): number of simulations. Defaults to 1.
+            random_state (int | None): seed. Defaults to None.
+            max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_score" and
+            dict[str, jnp.ndarray]: A dictionary with keys "home_score" and
                 "away_score". Values are the simulated goals scored in each simulation.
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
@@ -196,24 +195,24 @@ class BaseMatchPredictor:
 
     def sample_outcome(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
         num_samples: int = 1,
-        random_state: int = None,
-        max_goals: Optional[int] = MAX_GOALS,
-    ) -> np.array:
+        random_state: int | None = None,
+        max_goals: int | None = MAX_GOALS,
+    ) -> np.ndarray:
         """Sample outcome of match between two teams.
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            num_samples (int, optional): number of simulations. Defaults to 1.
-            random_state (int, optional): seed. Defaults to None.
-            max_goals (Optional[int]): Compute scorelines where each team scores up to
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            num_samples (int): number of simulations. Defaults to 1.
+            random_state (int | None): seed. Defaults to None.
+            max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            np.array: Array of strings representing the winning team or 'Draw'
+            np.ndarray: Array of strings representing the winning team or 'Draw'
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
@@ -247,27 +246,27 @@ class BaseMatchPredictor:
 
     def predict_score_n_proba(
         self,
-        n: Union[int, Iterable[int]],
-        team: Union[str, Iterable[str]],
-        opponent: Union[str, Iterable[str]],
-        home: Optional[bool] = True,
-        max_goals: Optional[int] = MAX_GOALS,
-    ) -> jnp.array:
+        n: int | Iterable[int],
+        team: str | Iterable[str],
+        opponent: str | Iterable[str],
+        home: bool | None = True,
+        max_goals: int | None = MAX_GOALS,
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will score n goals.
         Given a team and an opponent, calculate the probability that the team will
         score n goals against this opponent.
 
         Args:
-            n (Union[int, Iterable[int]]): number of goals scored.
-            team (Union[str, Iterable[str]]): name of the team scoring the goals.
-            opponent (Union[str, Iterable[str]]): name of the opponent.
-            home (Optional[bool]): whether team is at home.
-            max_goals (Optional[int]): Compute scorelines where each team scores up to
+            n (int | Iterable[int]): number of goals scored.
+            team (str | Iterable[str]): name of the team scoring the goals.
+            opponent (str | Iterable[str]): name of the opponent.
+            home (bool | None): whether team is at home.
+            max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            jnp.array: Probability that team scores n goals against opponent.
+            jnp.ndarray: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
         team, opponent = self._parse_fixture_args(team, opponent)
@@ -298,27 +297,27 @@ class BaseMatchPredictor:
 
     def predict_concede_n_proba(
         self,
-        n: Union[int, Iterable[int]],
-        team: Union[str, Iterable[str]],
-        opponent: Union[str, Iterable[str]],
-        home: Optional[bool] = True,
-        max_goals: Optional[int] = MAX_GOALS,
-    ) -> jnp.array:
+        n: int | Iterable[int],
+        team: str | Iterable[str],
+        opponent: str | Iterable[str],
+        home: bool | None = True,
+        max_goals: int | None = MAX_GOALS,
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will concede n goals.
         Given a team and an opponent, calculate the probability that the team will
         concede n goals against this opponent.
 
         Args:
-            n (Union[int, Iterable[int]]): number of goals conceded.
-            team (Union[str, Iterable[str]]): name of the team conceding the goals.
-            opponent (Union[str, Iterable[str]]): name of the opponent.
-            home (Optional[bool]): whether team is at home.
-            max_goals (Optional[int]): Compute scorelines where each team scores up to
+            n (int | Iterable[int]): number of goals conceded.
+            team (str | Iterable[str]): name of the team conceding the goals.
+            opponent (str | Iterable[str]): name of the opponent.
+            home (bool | None): whether team is at home.
+            max_goals (int | None): Compute scorelines where each team scores up to
                 this many goals. Defaults to bpl.base.MAX_GOALS.
 
         Returns:
-            jnp.array: Probability that team concedes n goals against opponent.
+            jnp.ndarray: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
         team, opponent = self._parse_fixture_args(team, opponent)

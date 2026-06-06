@@ -1,9 +1,8 @@
 """Implementation of the model in the current version of bpl."""
 
-from __future__ import annotations
-
 import warnings
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -24,7 +23,6 @@ from bpl.base import DTYPES, BaseMatchPredictor
 __all__ = ["ExtendedDixonColesMatchPredictor"]
 
 
-# pylint: disable=too-many-instance-attributes
 class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     """
     A Dixon-Coles like model for predicting match outcomes, modified to:
@@ -42,7 +40,6 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
     have length = number of matches modelled/predicted.
     """
 
-    # pylint: disable=duplicate-code
     def __init__(self):
         super().__init__()
         # attributes get populated when self.fit() is called
@@ -73,36 +70,35 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self.time_diff = None
         self.rescale_weights = None
 
-    # pylint: disable=too-many-arguments,too-many-locals,duplicate-code
     @staticmethod
     def _model(
-        home_team: jnp.array,
-        away_team: jnp.array,
+        home_team: jnp.ndarray,
+        away_team: jnp.ndarray,
         num_teams: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
-        team_covariates: Optional[np.array],
-        time_diff: Optional[Iterable[float]],
-        epsilon: Optional[float],
-        rescale_weights: Optional[bool] = False,
+        team_covariates: np.ndarray | None,
+        time_diff: Iterable[float] | None,
+        epsilon: float | None,
+        rescale_weights: bool | None = True,
     ):
         """
         NumPyro model definition.
 
         Args:
-            home_team jnp.array: integer indicator of the home team for each match.
-            away_team jnp.array: integer indicator of the away team for each match.
+            home_team jnp.ndarray: integer indicator of the home team for each match.
+            away_team jnp.ndarray: integer indicator of the away team for each match.
             num_teams int: number of teams playing.
             home_goals Iterable[int]: number of goals scored by the home team in each
             match.
             away_goals Iterable[int]: number of goals scored by the away team in each
             match.
-            team_covariates Optional[np.array]: optional team covariates
+            team_covariates np.ndarray | None: optional team covariates
             [num_teams, num_covariates].
-            epsilon Optional[float]: optional exponential time decay parameter.
-            time_diff Optional[Iterable[float]]: optional number of weeks between
+            epsilon float | None: optional exponential time decay parameter.
+            time_diff Iterable[float] | None: optional number of weeks between
             current game week and match week (must be provided if epsilon is provided).
-            rescale_weights Optional[bool]: If True, and epsilon and time_diff are
+            rescale_weights bool | None: If True, and epsilon and time_diff are
             provided, rescale the weights so they sum to the total number of
             matches. Final weights will be: num_matches * exp(-epsilon * time_diff)
             / sum(exp(-epsilon * time_diff))
@@ -119,8 +115,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         std_attack = numpyro.sample("std_attack", dist.HalfNormal(scale=1.0))
         std_defence = numpyro.sample("std_defence", dist.HalfNormal(scale=1.0))
 
-        # if have team covariates, build informative attack/defence prior means for each team
-        # else use same default prior for all teams
+        # if have team covariates, build informative attack/defence prior means for each
+        # team else use same default prior for all teams
         if team_covariates is not None:
             standardised_covariates = (
                 team_covariates - team_covariates.mean(axis=0)
@@ -194,8 +190,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         expected_away_goals = jnp.exp(attack[away_team] - defence[home_team])
 
         # FIXME: this is because the priors allow crazy simulated data before inference
-        expected_home_goals = jnp.clip(expected_home_goals, a_max=15.0)
-        expected_away_goals = jnp.clip(expected_away_goals, a_max=15.0)
+        expected_home_goals = jnp.clip(expected_home_goals, max=15.0)
+        expected_away_goals = jnp.clip(expected_away_goals, max=15.0)
 
         # likelihood (with optional decaying weights i.e., weigh recent data more
         # heavily)
@@ -247,18 +243,17 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         # numpyro.factor adds log probability to target density
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
-        training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
+        training_data: dict[str, Iterable[str] | Iterable[float]],
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
-        epsilon: Optional[float] = None,
-        rescale_weights: Optional[bool] = False,
-        mcmc_kwargs: Optional[Dict[str, Any]] = None,
-        run_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> ExtendedDixonColesMatchPredictor:
+        epsilon: float | None = None,
+        rescale_weights: bool | None = True,
+        mcmc_kwargs: dict[str, Any] | None = None,
+        run_kwargs: dict[str, Any] | None = None,
+    ) -> "ExtendedDixonColesMatchPredictor":
         """
         Fit model to data.
         """
@@ -266,17 +261,17 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         self.teams, self._teams_dict, home_ind, away_ind = parse_teams(
             training_data["home_team"], training_data["away_team"], DTYPES["teams"]
         )
-        team_covariates = training_data.get("team_covariates", None)
+        team_covariates = training_data.get("team_covariates")
 
         self.epsilon = epsilon
-        self.time_diff = training_data.get("time_diff", None)
+        self.time_diff = training_data.get("time_diff")
         self.rescale_weights = rescale_weights
-        if epsilon is not None:
-            if self.time_diff is None:
-                raise ValueError(
-                    "time_diff must be provided in training_data to include "
-                    "exponential time decay in model."
-                )
+        if epsilon is not None and self.time_diff is None:
+            msg = (
+                "time_diff must be provided in training_data to include "
+                "exponential time decay in model."
+            )
+            raise ValueError(msg)
 
         # if team_covariates are passed, construct informative attack/defence priors
         if team_covariates:
@@ -285,9 +280,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                 self._team_covariates_mean = team_covariates.mean(axis=0)
                 self._team_covariates_std = team_covariates.std(axis=0)
             else:
-                raise ValueError(
-                    "team_covariates must contain all the teams in the data."
-                )
+                msg = "team_covariates must contain all the teams in the data."
+                raise ValueError(msg)
 
         # initialize model and inference algorithm
         nuts_kernel = NUTS(self._model)
@@ -333,14 +327,14 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         return self
 
     def _calculate_expected_goals(
-        self, home_team: Union[str, Iterable[str]], away_team: Union[str, Iterable[str]]
-    ) -> Tuple[jnp.array, jnp.array]:
+        self, home_team: str | Iterable[str], away_team: str | Iterable[str]
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """
         Calculate expected goals for home and away team(s) by match.
 
         Args:
-            home_team Union[str, Iterable[str]]: name of home team(s) for each match.
-            away_team Union[str, Iterable[str]]: name of away team(s) for each  match.
+            home_team str | Iterable[str]: name of home team(s) for each match.
+            away_team str | Iterable[str]: name of away team(s) for each  match.
 
         Returns:
             Iterable[float], Iterable[float]: expected goals for (home, away) team(s)
@@ -360,24 +354,24 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
     def predict_score_proba(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        home_goals: Union[int, Iterable[int]],
-        away_goals: Union[int, Iterable[int]],
-    ) -> jnp.array:
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        home_goals: int | Iterable[int],
+        away_goals: int | Iterable[int],
+    ) -> jnp.ndarray:
         """
         Return the probability of a particular scoreline.
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            home_goals (Union[int, Iterable[int]]): number of goals scored by
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            home_goals (int | Iterable[int]): number of goals scored by
                 the home team(s).
-            away_goals (Union[int, Iterable[int]]): number of goals scored by
+            away_goals (int | Iterable[int]): number of goals scored by
                 the away team(s).
 
         Returns:
-            float: the probability of the given outcome.
+            jnp.ndarray: probability of the specified scoreline(s)
         """
         home_team, away_team = self._parse_fixture_args(home_team, away_team)
 
@@ -399,7 +393,7 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
         return sampled_probs.mean(axis=0)
 
     def add_new_team(
-        self, team_name: str, team_covariates: Optional[np.array] = None
+        self, team_name: str, team_covariates: np.ndarray | None = None
     ) -> None:
         """
         Build defence/attack/home_advantage parameters for team not seen in the training
@@ -407,11 +401,12 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
 
         Args:
             team_name str: name of new team.
-            team_covariates Optional[np.array]: optional team covariates
+            team_covariates np.ndarray | None: optional team covariates
             [num_teams, num_covariates].
         """
         if team_name in self.teams:
-            raise ValueError(f"Team {team_name} already known to model.")
+            msg = f"Team {team_name} already known to model."
+            raise ValueError(msg)
 
         # can only use team_covariates if coefficients for these were estimated during
         # training if available, build informative priors, else use defaults
@@ -420,7 +415,8 @@ class ExtendedDixonColesMatchPredictor(BaseMatchPredictor):
                 warnings.warn(
                     f"You haven't provided features for {team_name}."
                     " Assuming team_covariates are the average of known teams."
-                    " For better forecasts, provide team_covariates."
+                    " For better forecasts, provide team_covariates.",
+                    stacklevel=2,
                 )
                 team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
             else:

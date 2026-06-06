@@ -1,6 +1,3 @@
-import jax.numpy as jnp
-import pytest
-
 from bpl.dixon_coles import DixonColesMatchPredictor
 
 

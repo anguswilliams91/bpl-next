@@ -1,6 +1,6 @@
 """Private utility functions."""
 
-from typing import Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import jax
 import jax.numpy as jnp
@@ -15,8 +15,8 @@ def str_to_list(*args):
 
 
 def compute_corr_coef_bounds(
-    expected_home_goals: jnp.array, expected_away_goals: jnp.array
-) -> Tuple[float, float]:
+    expected_home_goals: jnp.ndarray, expected_away_goals: jnp.ndarray
+) -> tuple[float, float]:
     """
     Computes the bounds of the correlation coefficient from dixon and coles paper
     """
@@ -31,16 +31,15 @@ def compute_corr_coef_bounds(
     return LB, UB
 
 
-# pylint: disable=too-many-arguments
 def dixon_coles_correlation_term(
-    home_goals: Union[int, Iterable[int]],
-    away_goals: Union[int, Iterable[int]],
-    home_rate: jnp.array,
-    away_rate: jnp.array,
-    corr_coef: jnp.array,
-    weights: Optional[jnp.array] = None,
-    tol: Optional[float] = 0,  # workaround to clip negative values to tol to avoid NaNs
-) -> jnp.array:
+    home_goals: int | Iterable[int],
+    away_goals: int | Iterable[int],
+    home_rate: jnp.ndarray,
+    away_rate: jnp.ndarray,
+    corr_coef: jnp.ndarray,
+    weights: jnp.ndarray | None = None,
+    tol: float = 0.0,  # workaround to clip negative values to tol to avoid NaNs
+) -> jnp.ndarray:
     """
     Calculate correlation term from dixon and coles paper
     """
@@ -64,7 +63,7 @@ def dixon_coles_correlation_term(
                 - corr_coef[..., None]
                 * home_rate[..., nil_nil]
                 * away_rate[..., nil_nil],
-                a_min=tol,
+                min=tol,
             )
         )
     )
@@ -73,24 +72,21 @@ def dixon_coles_correlation_term(
     corr_term = corr_term.at[..., one_nil].set(
         weights[..., one_nil]
         * jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * away_rate[..., one_nil], a_min=tol)
+            jnp.clip(1.0 + corr_coef[..., None] * away_rate[..., one_nil], min=tol)
         )
     )
     nil_one = (home_goals == 0) & (away_goals == 1)
     corr_term = corr_term.at[..., nil_one].set(
         weights[..., nil_one]
         * jnp.log(
-            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], a_min=tol)
+            jnp.clip(1.0 + corr_coef[..., None] * home_rate[..., nil_one], min=tol)
         ),
     )
 
     one_one = (home_goals == 1) & (away_goals == 1)
-    corr_term = corr_term.at[..., one_one].set(
-        weights[..., one_one]
-        * jnp.log(jnp.clip(1.0 - corr_coef[..., None], a_min=tol)),
+    return corr_term.at[..., one_one].set(
+        weights[..., one_one] * jnp.log(jnp.clip(1.0 - corr_coef[..., None], min=tol)),
     )
-
-    return corr_term
 
 
 def map_choice(key, a, num_samples, p):
@@ -100,13 +96,12 @@ def map_choice(key, a, num_samples, p):
 
     def _map_choice_once(probs_and_key):
         probs, rng_key = probs_and_key
-        choices = jax.random.choice(
+        return jax.random.choice(
             rng_key,
             a,
             shape=(num_samples,),
             p=probs,
         )
-        return choices
 
     new_keys = jax.random.split(key, p.shape[0])
     return jax.vmap(_map_choice_once)((p, new_keys))
@@ -114,7 +109,7 @@ def map_choice(key, a, num_samples, p):
 
 def parse_teams(
     home_team: Iterable[str], away_team: Iterable[str], dtype: str
-) -> Tuple[np.ndarray, dict, jnp.ndarray, jnp.ndarray]:
+) -> tuple[np.ndarray, dict, jnp.ndarray, jnp.ndarray]:
     """Parse home and away teams for a number of fixtures to extract unique names,
     a mapping between team names and indices, and the corresponding indices for each
     fixture.

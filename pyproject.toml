@@ -1,24 +1,65 @@
-[tool.poetry]
+[project]
 name = "bpl"
-version = "0.3.0"
+version = "0.4.0"
 description = ""
-authors = ["Angus Williams <anguswilliams91@gmail.com>"]
+authors = [{ name = "Angus Williams", email = "anguswilliams91@gmail.com" }]
+requires-python = ">=3.10,<4"
+dependencies = [
+    "numpy>=2.2.6",
+    "numpyro>=0.19.0",
+    "scipy>=1.15.3",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-numpyro = "^0.13.2"
-scipy = "^1.12.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.1"
-black = "^24.2.0"
-isort = "^5.13.2"
-pytest-cov = "^4.1.0"
-pylint = "^3.0.4"
-
-[tool.isort]
-profile = "black"
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.13.1",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+docstring-code-format = true  # code snippets in docstrings will be formatted
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W", # flake8
+  "B",           # flake8-bugbear
+  "I",           # isort
+  "ARG",         # flake8-unused-arguments
+  "C4",          # flake8-comprehensions
+  "EM",          # flake8-errmsg
+  "ICN",         # flake8-import-conventions
+  "ISC",         # flake8-implicit-str-concat
+  "G",           # flake8-logging-format
+  "PGH",         # pygrep-hooks
+  "PIE",         # flake8-pie
+  "PL",          # pylint
+  "PT",          # flake8-pytest-style
+  "RET",         # flake8-return
+  "RUF",         # Ruff-specific
+  "SIM",         # flake8-simplify
+  "UP",          # pyupgrade
+  "YTT",         # flake8-2020
+  "EXE",         # flake8-executable
+]
+ignore = [
+  "PLR",    # Design related pylint codes
+  "ISC001", # Conflicts with formatter
+]
+flake8-unused-arguments.ignore-variadic-names = true  # allow unused *args/**kwargs
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = [
+	"F401",  # allow unused imports in __init__.py files
+]
+"**/tests/**" = [
+	"B011",  # allow using assert statements in tests
+	"ARG001"  # allow unused arguments in tests, e.g. for pytest fixtures
+]

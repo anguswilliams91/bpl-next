@@ -1,9 +1,11 @@
-"""Implementation of the neutral model with dynamic parameters in the current version of bpl."""
-
-from __future__ import annotations
+"""
+Implementation of the neutral model with dynamic parameters in the current version of
+bpl.
+"""
 
 import warnings
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -27,7 +29,6 @@ class DynamicNeutralDixonColesMatchPredictor:
     - Add separate home & away, defence & attack, advantages/disadvantages for each team
     """
 
-    # pylint: disable=duplicate-code
     def __init__(self):
         self.teams = None
         self.attack = None
@@ -58,18 +59,17 @@ class DynamicNeutralDixonColesMatchPredictor:
         self._team_covariates_mean = None
         self._team_covariates_std = None
 
-    # pylint: disable=too-many-locals,duplicate-code
     @staticmethod
     def _model(
-        home_team: jnp.array,
-        away_team: jnp.array,
-        gameweek: jnp.array,
+        home_team: jnp.ndarray,
+        away_team: jnp.ndarray,
+        gameweek: jnp.ndarray,
         num_teams: int,
         num_gameweeks: int,
         home_goals: Iterable[int],
         away_goals: Iterable[int],
         neutral_venue: Iterable[int],
-        team_covariates: Optional[np.array],
+        team_covariates: np.ndarray | None,
     ):
         with numpyro.plate("gameweek", num_gameweeks):
             mean_home_attack = numpyro.sample("mean_home_attack", dist.Normal(0.1, 0.2))
@@ -123,70 +123,70 @@ class DynamicNeutralDixonColesMatchPredictor:
             attack_prior_mean = mean_attack
             defence_prior_mean = mean_defence
 
-        with numpyro.plate("teams", num_teams):
-            with numpyro.plate("gameweek", num_gameweeks):
-                u = numpyro.sample(
-                    "u", dist.Beta(concentration1=2.0, concentration0=4.0)
-                )
-                rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
-                standardised_attack = numpyro.sample(
-                    "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
-                )
-                standardised_defence = numpyro.sample(
-                    "standardised_defence",
+        with (
+            numpyro.plate("teams", num_teams),
+            numpyro.plate("gameweek", num_gameweeks),
+        ):
+            u = numpyro.sample("u", dist.Beta(concentration1=2.0, concentration0=4.0))
+            rho = numpyro.deterministic("rho", 2.0 * u - 1.0)
+            standardised_attack = numpyro.sample(
+                "standardised_attack", dist.Normal(loc=0.0, scale=1.0)
+            )
+            standardised_defence = numpyro.sample(
+                "standardised_defence",
+                dist.Normal(
+                    loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho**2.0)
+                ),
+            )
+
+            with reparam(config={"home_attack": LocScaleReparam(centered=0)}):
+                home_attack = numpyro.sample(
+                    "home_attack",
                     dist.Normal(
-                        loc=rho * standardised_attack, scale=jnp.sqrt(1.0 - rho**2.0)
+                        jnp.repeat(mean_home_attack, num_teams).reshape(
+                            num_gameweeks, num_teams
+                        ),
+                        jnp.repeat(std_home_attack, num_teams).reshape(
+                            num_gameweeks, num_teams
+                        ),
                     ),
                 )
-
-                with reparam(config={"home_attack": LocScaleReparam(centered=0)}):
-                    home_attack = numpyro.sample(
-                        "home_attack",
-                        dist.Normal(
-                            jnp.repeat(mean_home_attack, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
-                            jnp.repeat(std_home_attack, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
+            with reparam(config={"away_attack": LocScaleReparam(centered=0)}):
+                away_attack = numpyro.sample(
+                    "away_attack",
+                    dist.Normal(
+                        jnp.repeat(mean_away_attack, num_teams).reshape(
+                            num_gameweeks, num_teams
                         ),
-                    )
-                with reparam(config={"away_attack": LocScaleReparam(centered=0)}):
-                    away_attack = numpyro.sample(
-                        "away_attack",
-                        dist.Normal(
-                            jnp.repeat(mean_away_attack, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
-                            jnp.repeat(std_away_attack, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
+                        jnp.repeat(std_away_attack, num_teams).reshape(
+                            num_gameweeks, num_teams
                         ),
-                    )
-                with reparam(config={"home_defence": LocScaleReparam(centered=0)}):
-                    home_defence = numpyro.sample(
-                        "home_defence",
-                        dist.Normal(
-                            jnp.repeat(mean_home_defence, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
-                            jnp.repeat(std_home_defence, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
+                    ),
+                )
+            with reparam(config={"home_defence": LocScaleReparam(centered=0)}):
+                home_defence = numpyro.sample(
+                    "home_defence",
+                    dist.Normal(
+                        jnp.repeat(mean_home_defence, num_teams).reshape(
+                            num_gameweeks, num_teams
                         ),
-                    )
-                with reparam(config={"away_defence": LocScaleReparam(centered=0)}):
-                    away_defence = numpyro.sample(
-                        "away_defence",
-                        dist.Normal(
-                            jnp.repeat(mean_away_defence, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
-                            jnp.repeat(std_away_defence, num_teams).reshape(
-                                num_gameweeks, num_teams
-                            ),
+                        jnp.repeat(std_home_defence, num_teams).reshape(
+                            num_gameweeks, num_teams
                         ),
-                    )
+                    ),
+                )
+            with reparam(config={"away_defence": LocScaleReparam(centered=0)}):
+                away_defence = numpyro.sample(
+                    "away_defence",
+                    dist.Normal(
+                        jnp.repeat(mean_away_defence, num_teams).reshape(
+                            num_gameweeks, num_teams
+                        ),
+                        jnp.repeat(std_away_defence, num_teams).reshape(
+                            num_gameweeks, num_teams
+                        ),
+                    ),
+                )
         # why aren't these standardised? if they are, how?
         # what is standardised_attack and standardised_defence actually doing
         attack = jnp.empty([num_gameweeks, num_teams])
@@ -246,16 +246,15 @@ class DynamicNeutralDixonColesMatchPredictor:
         )
         numpyro.factor("correlation_term", corr_term.sum(axis=-1))
 
-    # pylint: disable=arguments-differ,too-many-arguments,duplicate-code
     def fit(
         self,
-        training_data: Dict[str, Union[Iterable[str], Iterable[float]]],
+        training_data: dict[str, Iterable[str] | Iterable[float]],
         random_state: int = 42,
         num_warmup: int = 500,
         num_samples: int = 1000,
-        mcmc_kwargs: Optional[Dict[str, Any]] = None,
-        run_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> DynamicNeutralDixonColesMatchPredictor:
+        mcmc_kwargs: dict[str, Any] | None = None,
+        run_kwargs: dict[str, Any] | None = None,
+    ) -> "DynamicNeutralDixonColesMatchPredictor":
         """
         Fit the model.
         """
@@ -263,15 +262,14 @@ class DynamicNeutralDixonColesMatchPredictor:
         away_team = training_data["away_team"]
         team_covariates = training_data.get("team_covariates")
 
-        self.teams = sorted(list(set(home_team) | set(away_team)))
+        self.teams = sorted(set(home_team) | set(away_team))
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
 
         if team_covariates:
             if set(team_covariates.keys()) != set(self.teams):
-                raise ValueError(
-                    "team_covariates must contain all the teams in the data."
-                )
+                msg = "team_covariates must contain all the teams in the data."
+                raise ValueError(msg)
             team_covariates = jnp.array([team_covariates[t] for t in self.teams])
             self._team_covariates_mean = team_covariates.mean(axis=0)
             self._team_covariates_std = team_covariates.std(axis=0)
@@ -300,11 +298,6 @@ class DynamicNeutralDixonColesMatchPredictor:
         )
 
         samples = mcmc.get_samples()
-        print(samples["attack_0"].shape)
-        print(samples["attack_1"].shape)
-        print(samples[f"attack_{num_gameweeks-1}"].shape)
-        print([samples[f"attack_{j}"].shape for j in range(num_gameweeks)])
-        print([samples[f"defence_{j}"].shape for j in range(num_gameweeks)])
         self.attack = [samples[f"attack_{j}"] for j in range(num_gameweeks)]
         self.defence = [samples[f"defence_{j}"] for j in range(num_gameweeks)]
         self.home_attack = samples["home_attack"]
@@ -335,10 +328,10 @@ class DynamicNeutralDixonColesMatchPredictor:
 
     def _calculate_expected_goals(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        neutral_venue: Union[int, Iterable[int]],
-    ) -> Tuple[jnp.array, jnp.array]:
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        neutral_venue: int | Iterable[int],
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         home_ind = jnp.array([self.teams.index(t) for t in home_team])
         away_ind = jnp.array([self.teams.index(t) for t in away_team])
         neutral_venue = jnp.array(neutral_venue)
@@ -363,12 +356,12 @@ class DynamicNeutralDixonColesMatchPredictor:
 
     def predict_score_proba(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        home_goals: Union[int, Iterable[int]],
-        away_goals: Union[int, Iterable[int]],
-        neutral_venue: Union[int, Iterable[int]],
-    ) -> jnp.array:
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        home_goals: int | Iterable[int],
+        away_goals: int | Iterable[int],
+        neutral_venue: int | Iterable[int],
+    ) -> jnp.ndarray:
         """
         Predict probabilities for scorelines.
         """
@@ -393,16 +386,18 @@ class DynamicNeutralDixonColesMatchPredictor:
         sampled_probs = jnp.exp(corr_term) * home_probs * away_probs
         return sampled_probs.mean(axis=0)
 
-    def add_new_team(self, team_name: str, team_covariates: Optional[np.array] = None):
+    def add_new_team(self, team_name: str, team_covariates: np.ndarray | None = None):
         if team_name in self.teams:
-            raise ValueError(f"Team {team_name} already known to model.")
+            msg = f"Team {team_name} already known to model."
+            raise ValueError(msg)
 
         if self.attack_coefficients is not None:
             if team_covariates is None:
                 warnings.warn(
                     f"You haven't provided features for {team_name}."
                     " Assuming team_covariates are the average of known teams."
-                    " For better forecasts, provide team_covariates."
+                    " For better forecasts, provide team_covariates.",
+                    stacklevel=2,
                 )
                 team_covariates = jnp.zeros(self.attack_coefficients.shape[1])
             else:
@@ -448,23 +443,23 @@ class DynamicNeutralDixonColesMatchPredictor:
 
     def predict_outcome_proba(
         self,
-        home_team: Union[str, Iterable[str]],
-        away_team: Union[str, Iterable[str]],
-        neutral_venue: Union[int, Iterable[int]],
-    ) -> Dict[str, jnp.array]:
+        home_team: str | Iterable[str],
+        away_team: str | Iterable[str],
+        neutral_venue: int | Iterable[int],
+    ) -> dict[str, jnp.ndarray]:
         """Calculate home win, away win and draw probabilities.
 
         Given a home team and away team (or lists thereof), calculate the probabilites
         of the overall results (home win, away win, draw).
 
         Args:
-            home_team (Union[str, Iterable[str]]): name of the home team(s).
-            away_team (Union[str, Iterable[str]]): name of the away team(s).
-            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
-            else 0
+            home_team (str | Iterable[str]): name of the home team(s).
+            away_team (str | Iterable[str]): name of the away team(s).
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
+                venue, else 0
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: A dictionary with keys "home_win",
+            dict[str, float | jnp.ndarray]: A dictionary with keys "home_win",
                 "away_win" and "draw". Values are probabilities of each outcome.
         """
         home_team = [home_team] if isinstance(home_team, str) else home_team
@@ -493,27 +488,27 @@ class DynamicNeutralDixonColesMatchPredictor:
 
     def predict_score_n_proba(
         self,
-        n: Union[int, Iterable[int]],
-        team: Union[str, Iterable[str]],
-        opponent: Union[str, Iterable[str]],
-        home: Optional[bool] = True,
-        neutral_venue: Optional[int] = 0,
-    ) -> jnp.array:
+        n: int | Iterable[int],
+        team: str | Iterable[str],
+        opponent: str | Iterable[str],
+        home: bool | None = True,
+        neutral_venue: int | None = 0,
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will score n goals.
         Given a team and an opponent, calculate the probability that the team will
         score n goals against this opponent.
 
         Args:
-            n (Union[int, Iterable[int]]): number of goals scored.
-            team (Union[str, Iterable[str]]): name of the team scoring the goals.
-            opponent (Union[str, Iterable[str]]): name of the opponent.
-            home (Optional[bool]): whether team is at home.
-            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
-            else 0
+            n (int | Iterable[int]): number of goals scored.
+            team (str | Iterable[str]): name of the team scoring the goals.
+            opponent (str | Iterable[str]): name of the opponent.
+            home (bool | None): whether team is at home.
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
+                venue, else 0
 
         Returns:
-            jnp.array: Probability that team scores n goals against opponent.
+            jnp.ndarray: Probability that team scores n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
 
@@ -539,27 +534,27 @@ class DynamicNeutralDixonColesMatchPredictor:
 
     def predict_concede_n_proba(
         self,
-        n: Union[int, Iterable[int]],
-        team: Union[str, Iterable[str]],
-        opponent: Union[str, Iterable[str]],
-        home: Optional[bool] = True,
-        neutral_venue: Optional[int] = 0,
-    ) -> jnp.array:
+        n: int | Iterable[int],
+        team: str | Iterable[str],
+        opponent: str | Iterable[str],
+        home: bool | None = True,
+        neutral_venue: int | None = 0,
+    ) -> jnp.ndarray:
         """
         Compute the probability that a team will concede n goals.
         Given a team and an opponent, calculate the probability that the team will
         concede n goals against this opponent.
 
         Args:
-            n (Union[int, Iterable[int]]): number of goals conceded.
-            team (Union[str, Iterable[str]]): name of the team conceding the goals.
-            opponent (Union[str, Iterable[str]]): name of the opponent.
-            home (Optional[bool]): whether team is at home.
-            neutral_venue (Union[int, Iterable[int]]): 1 if game played at neutral venue,
-            else 0
+            n (int | Iterable[int]): number of goals conceded.
+            team (str | Iterable[str]): name of the team conceding the goals.
+            opponent (str | Iterable[str]): name of the opponent.
+            home (bool | None): whether team is at home.
+            neutral_venue (int | Iterable[int]): 1 if game played at neutral
+                venue, else 0
 
         Returns:
-            jnp.array: Probability that team concedes n goals against opponent.
+            jnp.ndarray: Probability that team concedes n goals against opponent.
         """
         n = [n] if isinstance(n, int) else n
 
