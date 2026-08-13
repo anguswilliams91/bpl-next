@@ -1,4 +1,4 @@
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 from bpl.dixon_coles import DixonColesMatchPredictor
 from bpl.extended_dixon_coles import ExtendedDixonColesMatchPredictor
